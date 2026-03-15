@@ -2,8 +2,12 @@
 CLI entry point -- simulate.py equivalent.
 
 Usage:
-  python -m pokerena [options]
-  pokerena [options]          (if installed via pip)
+  pokerena [options]                run a tournament simulation
+  pokerena battle <name-a> <name-b> run a single battle between two named Pokemon
+  pokerena battle --random          pick two random Pokemon and battle them
+  pokerena cache info               show cached namespaces and file counts
+  pokerena cache clear              delete all cached data
+  pokerena cache clear smogon       delete only the smogon namespace
 """
 
 from __future__ import annotations
@@ -13,8 +17,13 @@ import logging
 import os
 import sys
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
+from pokerena.data import cache as disk_cache
 from pokerena.data.loader import load_all
+
+if TYPE_CHECKING:
+    from pokerena.models import Pokemon
 from pokerena.models import TIER_ORDER
 from pokerena.report import console as con
 from pokerena.report import writers
@@ -27,6 +36,72 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="pokerena",
         description="Pokemon battle tournament simulator.",
     )
+
+    sub = p.add_subparsers(dest="command", metavar="command")
+
+    # -- battle sub-command
+    battle_p = sub.add_parser(
+        "battle",
+        help="Run a single battle and print the result.",
+    )
+    battle_p.add_argument(
+        "pokemon",
+        nargs="*",
+        metavar="NAME",
+        help="Names of the two Pokemon to battle (e.g. pikachu mewtwo).",
+    )
+    battle_p.add_argument(
+        "--random",
+        action="store_true",
+        help="Pick two Pokemon at random instead of specifying names.",
+    )
+    battle_p.add_argument(
+        "--gen",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Generation to draw Pokemon from when using --random. Default: 1",
+    )
+    battle_p.add_argument(
+        "--gen1-mode",
+        action="store_true",
+        help="Use Gen 1 stat formula.",
+    )
+    battle_p.add_argument(
+        "--rand-ivs",
+        action="store_true",
+        help="Use random IVs instead of max IVs.",
+    )
+    battle_p.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Random seed for reproducibility.",
+    )
+    battle_p.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable debug logging.",
+    )
+
+    # -- cache sub-command
+    cache_p = sub.add_parser("cache", help="Manage the local data cache.")
+    cache_sub = cache_p.add_subparsers(dest="cache_action", metavar="action")
+
+    cache_sub.add_parser("info", help="Show cached namespaces and file counts.")
+
+    clear_p = cache_sub.add_parser("clear", help="Delete cached files.")
+    clear_p.add_argument(
+        "namespace",
+        nargs="?",
+        default=None,
+        metavar="NAMESPACE",
+        help="Namespace to clear (e.g. smogon, pokeapi). Omit to clear everything.",
+    )
+
+    # -- simulate options (the default command when none is given)
     p.add_argument(
         "--gen",
         type=int,
@@ -91,31 +166,149 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _cmd_cache_info() -> None:
+    """Print cached namespaces and their file counts."""
+    sizes = disk_cache.cache_size()
+    root = disk_cache._CACHE_ROOT
+    if not sizes:
+        print(f"Cache is empty ({root})")
+        return
+    print(f"Cache location: {root}")
+    for ns, count in sizes.items():
+        print(f"  {ns}: {count} file{'s' if count != 1 else ''}")
+
+
+def _cmd_cache_clear(namespace: str | None) -> None:
+    """Delete cached files, optionally scoped to a single namespace."""
+    count = disk_cache.clear(namespace)
+    scope = namespace if namespace else "all namespaces"
+    print(f"Cleared {count} file{'s' if count != 1 else ''} from {scope}.")
+
+
+def _load_one(name: str, gen: int) -> Pokemon:
+    """Load a single Pokemon by name using the same pipeline as load_all."""
+    from pokerena.data import pokeapi, smogon
+    from pokerena.data.loader import _select_moveset
+    from pokerena.models import Pokemon
+
+    tier_map = smogon.load_tiers(gen)
+    pdata = pokeapi.fetch_pokemon(name.lower())
+    base_stats = pokeapi.parse_base_stats(pdata)
+    types = pokeapi.parse_types(pdata)
+    move_names = pokeapi.get_candidate_move_names(pdata)
+    generation = pokeapi.get_generation_number(pdata)
+    tier = smogon.assign_tier(name.lower(), tier_map)
+    moves = _select_moveset(move_names, types)
+    bst = sum(base_stats.values())
+    return Pokemon(
+        name=name.lower(),
+        types=types,
+        base_stats=base_stats,
+        moves=moves,
+        generation=generation,
+        smogon_tier=tier,
+        bst=bst,
+    )
+
+
+def _cmd_battle(args: argparse.Namespace) -> None:
+    """Run a single battle and print a human-readable result."""
+    import random as _random
+
+    from pokerena.engine.battle import run_battle
+    from pokerena.models import TIER_LABELS
+
+    rng = _random.Random(args.seed)
+
+    if args.random:
+        from pokerena.data.loader import load_all
+
+        print(f"Loading Gen {args.gen} roster...")
+        roster = load_all(args.gen)
+        if len(roster) < 2:
+            print("Not enough Pokemon loaded. Run with --fetch first.")
+            return
+        poke_a, poke_b = rng.sample(roster, 2)
+    elif len(args.pokemon) == 2:
+        name_a, name_b = args.pokemon
+        print(f"Loading {name_a} and {name_b}...")
+        try:
+            poke_a = _load_one(name_a, args.gen)
+            poke_b = _load_one(name_b, args.gen)
+        except Exception as exc:
+            print(f"Failed to load Pokemon: {exc}")
+            return
+    else:
+        print("Provide two Pokemon names  or use --random.")
+        print("  pokerena battle pikachu mewtwo")
+        print("  pokerena battle --random --gen 1")
+        return
+
+    tier_a = TIER_LABELS.get(poke_a.smogon_tier, poke_a.smogon_tier.upper())
+    tier_b = TIER_LABELS.get(poke_b.smogon_tier, poke_b.smogon_tier.upper())
+
+    types_a = "/".join(t.capitalize() for t in poke_a.types)
+    types_b = "/".join(t.capitalize() for t in poke_b.types)
+    print()
+    print(f"  {poke_a.name.capitalize()} [{types_a}]  BST {poke_a.bst}  {tier_a}")
+    print("    vs")
+    print(f"  {poke_b.name.capitalize()} [{types_b}]  BST {poke_b.bst}  {tier_b}")
+    print()
+
+    result = run_battle(
+        poke_a,
+        poke_b,
+        rand_ivs=args.rand_ivs,
+        rng=rng,
+        gen1_mode=args.gen1_mode,
+    )
+
+    loser = poke_b.name if result.winner == poke_a.name else poke_a.name
+    resolved = "timeout (HP%)" if result.timeout else f"faint in turn {result.turns}"
+    hp_pct = f"{result.winner_hp_pct * 100:.1f}%"
+
+    print(f"  Winner: {result.winner.capitalize()}")
+    print(f"  Loser:  {loser.capitalize()}")
+    print(f"  Turns:  {result.turns}  ({resolved})")
+    print(f"  Winner HP remaining: {result.winner_hp_remaining}/{result.winner_hp_max} ({hp_pct})")
+    if result.attacker_had_advantage:
+        print("  (winner had a type advantage)")
+    print()
+
+
 def _run_gen(
     gen: int,
     args: argparse.Namespace,
     workers: int,
 ) -> None:
     """Load Pokemon, run the full tournament for one generation, and write outputs."""
-    # Load Pokemon
+    from tqdm import tqdm
+
     pokemon = load_all(gen, force_fetch=args.fetch)
     if not pokemon:
         print(f"No Pokemon loaded for Gen {gen}. Run with --fetch to download data.")
         return
 
-    # Group by tier
     pokemon_by_tier: dict[str, list] = defaultdict(list)
     for p in pokemon:
         pokemon_by_tier[p.smogon_tier].append(p)
 
-    # Estimate total battles for Phase 1
-    total_battles = sum(
+    # Phase 1: sum of matchup battles per tier
+    phase1_battles = sum(
         len(pokes) * (len(pokes) - 1) // 2 * args.battles
         for pokes in pokemon_by_tier.values()
         if len(pokes) >= 2
     )
-    # Phase 2 + 3 approximations
-    total_battles += 5 * 50 + 10 * 100
+    # Phase 2: one playoff per adjacent tier pair that could both have champions
+    n_phases2_pairs = sum(
+        1
+        for t1, t2 in zip(TIER_ORDER, TIER_ORDER[1:], strict=False)
+        if pokemon_by_tier.get(t1) and pokemon_by_tier.get(t2)
+    )
+    phase2_battles = n_phases2_pairs * 50
+    # Phase 3: rough upper bound -- all phase 2 winners in a round robin
+    phase3_battles = n_phases2_pairs * (n_phases2_pairs - 1) // 2 * 100
+    total_battles = phase1_battles + phase2_battles + phase3_battles
 
     con.print_header(
         gen=gen,
@@ -127,19 +320,26 @@ def _run_gen(
 
     con.print_phase1_header()
 
-    results = run_full_tournament(
-        gen=gen,
-        pokemon_by_tier=dict(pokemon_by_tier),
-        n_battles_phase1=args.battles,
-        n_battles_phase2=50,
-        n_battles_phase3=100,
-        rand_ivs=args.rand_ivs,
-        seed=args.seed,
-        workers=workers,
-        gen1_mode=args.gen1_mode,
-    )
+    with tqdm(
+        total=total_battles,
+        unit="battle",
+        desc=f"Gen {gen}",
+        dynamic_ncols=True,
+        leave=True,
+    ) as bar:
+        results = run_full_tournament(
+            gen=gen,
+            pokemon_by_tier=dict(pokemon_by_tier),
+            n_battles_phase1=args.battles,
+            n_battles_phase2=50,
+            n_battles_phase3=100,
+            rand_ivs=args.rand_ivs,
+            seed=args.seed,
+            workers=workers,
+            gen1_mode=args.gen1_mode,
+            progress=bar,
+        )
 
-    # Print Phase 1 results
     for tier in TIER_ORDER:
         lb = results["tier_leaderboards"].get(tier)
         if lb and lb.champion:
@@ -150,35 +350,46 @@ def _run_gen(
                 participants=len(lb.entries),
             )
 
-    # Print Phase 2 results
     con.print_phase2_header()
     for pr in results.get("playoffs", []):
         con.print_playoff_result(pr)
 
-    # Print Phase 3 results
     gf = results.get("grand_final")
     if gf:
         con.print_phase3_header(100)
         con.print_grand_final(gf, top=args.top)
 
-    # Write CSVs
     writers.write_all(gen=gen, results=results, pokemon_by_tier=dict(pokemon_by_tier))
 
 
 def main() -> None:
-    """Parse CLI arguments and run the simulator."""
+    """Parse CLI arguments and dispatch to the appropriate handler."""
     parser = _build_parser()
     args = parser.parse_args()
 
-    log_level = logging.DEBUG if args.verbose else logging.WARNING
+    log_level = logging.DEBUG if getattr(args, "verbose", False) else logging.WARNING
     logging.basicConfig(
         level=log_level,
         format="%(levelname)s %(name)s: %(message)s",
         stream=sys.stderr,
     )
 
-    workers = args.workers or os.cpu_count() or 4
+    if args.command == "battle":
+        _cmd_battle(args)
+        return
 
+    if args.command == "cache":
+        if args.cache_action == "info":
+            _cmd_cache_info()
+        elif args.cache_action == "clear":
+            _cmd_cache_clear(args.namespace)
+        else:
+            # `pokerena cache` with no action -- show help
+            parser.parse_args(["cache", "--help"])
+        return
+
+    # Default: run the simulator
+    workers = args.workers or os.cpu_count() or 4
     if args.all_gens:
         for gen in range(1, 10):
             _run_gen(gen, args, workers)

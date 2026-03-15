@@ -16,6 +16,7 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from itertools import combinations
+from typing import Any
 
 from pokerena.engine.battle import BattleResult, run_battle
 from pokerena.models import TIER_ORDER, Pokemon
@@ -203,10 +204,12 @@ def run_tier_tournament(
     seed: int | None = None,
     workers: int = 4,
     gen1_mode: bool = False,
+    progress: Any = None,
 ) -> tuple[TierLeaderboard, list[MatchupRecord]]:
     """
     Run a full round robin within a tier.
     Returns (leaderboard, all matchup records).
+    If progress is a tqdm bar, it is advanced by n_battles per completed matchup.
     """
     if len(pokemon) < 2:
         log.warning("Tier %s has fewer than 2 Pokemon -- skipping.", tier)
@@ -244,6 +247,8 @@ def run_tier_tournament(
                 records.append(fut.result())
             except Exception as exc:  # noqa: BLE001
                 log.error("Matchup failed: %s", exc)
+            if progress is not None:
+                progress.update(n_battles)
 
     leaderboard = _build_leaderboard(tier, pokemon, records)
     return leaderboard, records
@@ -384,10 +389,12 @@ def run_grand_final(
     seed: int | None = None,
     workers: int = 4,
     gen1_mode: bool = False,
+    progress: Any = None,
 ) -> GrandFinalResult:
     """
     Full round robin among playoff winners.
     Returns a GrandFinalResult with rankings and win-rate matrix.
+    If progress is a tqdm bar, it is advanced by n_battles per completed matchup.
     """
     pokemon_list = [p for p, _ in finalists]
     source_map = {p.name: t for p, t in finalists}
@@ -415,6 +422,8 @@ def run_grand_final(
                 records.append(fut.result())
             except Exception as exc:  # noqa: BLE001
                 log.error("Grand final matchup failed: %s", exc)
+            if progress is not None:
+                progress.update(n_battles)
 
     # Build win totals
     wins: dict[str, int] = defaultdict(int)
@@ -462,10 +471,12 @@ def run_full_tournament(
     seed: int | None = None,
     workers: int = 4,
     gen1_mode: bool = False,
+    progress: Any = None,
 ) -> dict:
     """
     Run the full 3-phase tournament for one generation.
     Returns a results dict with all leaderboards, playoff results, and grand final.
+    If progress is a tqdm bar, it is advanced throughout all three phases.
     """
     results: dict = {
         "gen": gen,
@@ -494,6 +505,7 @@ def run_full_tournament(
             seed=seed,
             workers=workers,
             gen1_mode=gen1_mode,
+            progress=progress,
         )
         lb.gen = gen
         results["tier_leaderboards"][tier] = lb
@@ -548,6 +560,8 @@ def run_full_tournament(
             gen1_mode=gen1_mode,
         )
         results["playoffs"].append(pr)
+        if progress is not None:
+            progress.update(n_battles_phase2)
         if pr.upset:
             results["upsets"].append(pr)
             log.info(
@@ -582,6 +596,7 @@ def run_full_tournament(
             seed=seed,
             workers=workers,
             gen1_mode=gen1_mode,
+            progress=progress,
         )
         results["grand_final"] = gf
         log.info(

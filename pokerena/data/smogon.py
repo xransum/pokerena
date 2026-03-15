@@ -10,10 +10,9 @@ If no cached file exists for a generation, a bundled fallback is used that
 maps all Pokemon to "ou" so the simulator can still run (with a warning).
 The --fetch flag triggers re-downloading from the authoritative source.
 
-Authoritative source: Smogon's public GitHub datasets at
-  https://github.com/smogon/pokemon-showdown/blob/master/config/formats.ts
-and the compiled community JSON datasets maintained at:
-  https://raw.githubusercontent.com/smogon/data/master/src/
+Authoritative source: smogon/pokemon-showdown on GitHub:
+  Gen 1-8: https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data/mods/gen{N}/formats-data.ts
+  Gen 9:   https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data/formats-data.ts
 """
 
 from __future__ import annotations
@@ -25,25 +24,26 @@ from pokerena.models import TIERS
 
 log = logging.getLogger(__name__)
 
-# Smogon community JSON datasets by generation.
-# These are the authoritative compiled tier lists from the smogon/data repo.
+# Pokemon Showdown formats-data.ts URLs by generation.
+# Gen 1-8 use per-gen mod files; Gen 9 uses the main data file.
+_PS_BASE = "https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data"
 _SMOGON_URLS: dict[int, str] = {
-    1: "https://raw.githubusercontent.com/smogon/data/master/src/rb_ou.json",
-    2: "https://raw.githubusercontent.com/smogon/data/master/src/gs_ou.json",
-    3: "https://raw.githubusercontent.com/smogon/data/master/src/rs_ou.json",
-    4: "https://raw.githubusercontent.com/smogon/data/master/src/dp_ou.json",
-    5: "https://raw.githubusercontent.com/smogon/data/master/src/bw_ou.json",
-    6: "https://raw.githubusercontent.com/smogon/data/master/src/xy_ou.json",
-    7: "https://raw.githubusercontent.com/smogon/data/master/src/sm_ou.json",
-    8: "https://raw.githubusercontent.com/smogon/data/master/src/ss_ou.json",
-    9: "https://raw.githubusercontent.com/smogon/data/master/src/sv_ou.json",
+    1: f"{_PS_BASE}/mods/gen1/formats-data.ts",
+    2: f"{_PS_BASE}/mods/gen2/formats-data.ts",
+    3: f"{_PS_BASE}/mods/gen3/formats-data.ts",
+    4: f"{_PS_BASE}/mods/gen4/formats-data.ts",
+    5: f"{_PS_BASE}/mods/gen5/formats-data.ts",
+    6: f"{_PS_BASE}/mods/gen6/formats-data.ts",
+    7: f"{_PS_BASE}/mods/gen7/formats-data.ts",
+    8: f"{_PS_BASE}/mods/gen8/formats-data.ts",
+    9: f"{_PS_BASE}/formats-data.ts",
 }
 
 # Fallback hand-curated Gen 1 tier assignments sourced from
-# https://www.smogon.com/dex/rb/formats/
+# smogon/pokemon-showdown data/mods/gen1/formats-data.ts.
 # Used when network fetch is unavailable.
 _GEN1_FALLBACK: dict[str, str] = {
-    # Ubers
+    # Uber
     "mewtwo": "ubers",
     "mew": "ubers",
     # OU
@@ -54,118 +54,100 @@ _GEN1_FALLBACK: dict[str, str] = {
     "exeggutor": "ou",
     "starmie": "ou",
     "jolteon": "ou",
-    "lapras": "ou",
-    "dragonite": "ou",
-    "rhydon": "ou",
-    "slowbro": "ou",
     "cloyster": "ou",
-    "tentacruel": "ou",
-    "golem": "ou",
+    "gengar": "ou",
+    "rhydon": "ou",
+    "zapdos": "ou",
+    "jynx": "ou",
     # UU
-    "nidoking": "uu",
-    "nidoqueen": "uu",
-    "venusaur": "uu",
-    "blastoise": "uu",
-    "charizard": "uu",
-    "hypno": "uu",
-    "machamp": "uu",
-    "victreebel": "uu",
-    "scyther": "uu",
-    "pinsir": "uu",
-    "hitmonlee": "uu",
-    "hitmonchan": "uu",
-    "dewgong": "uu",
-    "dodrio": "uu",
-    "electrode": "uu",
-    "magneton": "uu",
+    "raichu": "uu",
+    "clefable": "uu",
+    "ninetales": "uu",
     "persian": "uu",
-    "raticate": "uu",
+    "dugtrio": "uu",
     "rapidash": "uu",
-    "seaking": "uu",
-    "tangela": "uu",
-    "vaporeon": "uu",
-    "omastar": "uu",
-    "kabutops": "uu",
-    # RU
-    "arcanine": "ru",
-    "poliwrath": "ru",
-    "aerodactyl": "ru",
-    "flareon": "ru",
-    "moltres": "ru",
-    "zapdos": "ru",
-    "articuno": "ru",
-    "gyarados": "ru",
-    "mr-mime": "ru",
-    "jynx": "ru",
-    "electabuzz": "ru",
-    "magmar": "ru",
-    # NU -- everything else gets NU as default, overridden below for PU
+    "slowbro": "uu",
+    "dodrio": "uu",
+    "haunter": "uu",
+    "hypno": "uu",
+    "electabuzz": "uu",
+    "gyarados": "uu",
+    "lapras": "uu",
+    "articuno": "uu",
+    "moltres": "uu",
+    "dragonite": "uu",
+    "kangaskhan": "uu",
+    # NU
+    "venusaur": "nu",
+    "charizard": "nu",
+    "blastoise": "nu",
+    "raticate": "nu",
+    "fearow": "nu",
+    "arcanine": "nu",
+    "poliwhirl": "nu",
+    "poliwrath": "nu",
+    "kadabra": "nu",
+    "victreebel": "nu",
+    "tentacruel": "nu",
+    "golem": "nu",
+    "electrode": "nu",
+    "magneton": "nu",
+    "mrmime": "nu",
+    "mr-mime": "nu",
+    "vaporeon": "nu",
+    "omastar": "nu",
+    "kabutops": "nu",
+    "aerodactyl": "nu",
+    "tangela": "nu",
+    "seadra": "nu",
+    "venomoth": "nu",
+    "dewgong": "nu",
+    "machamp": "nu",
+    # PU
+    "nidoking": "pu",
+    "golduck": "pu",
+    "primeape": "pu",
+    "abra": "pu",
+    "exeggcute": "pu",
+    "graveler": "pu",
+    "gastly": "pu",
+    "scyther": "pu",
+    "magmar": "pu",
+    "porygon": "pu",
+    "seaking": "pu",
+    "staryu": "pu",
+    "pidgeot": "pu",
 }
 
-# Explicit PU assignments for Gen 1
+# PU-or-lower assignments for Gen 1 (ZU maps to pu in our scale)
 _GEN1_PU: set[str] = {
-    "caterpie",
-    "weedle",
-    "pidgey",
-    "rattata",
-    "spearow",
-    "ekans",
-    "sandshrew",
-    "nidoran-f",
-    "nidoran-m",
-    "clefairy",
-    "vulpix",
-    "jigglypuff",
-    "zubat",
-    "oddish",
-    "paras",
-    "venonat",
-    "diglett",
-    "meowth",
-    "psyduck",
-    "mankey",
-    "growlithe",
-    "poliwag",
-    "abra",
-    "bellsprout",
-    "tentacool",
-    "geodude",
-    "ponyta",
+    "butterfree",
+    "beedrill",
+    "nidoqueen",
+    "wigglytuff",
+    "golbat",
+    "vileplume",
+    "parasect",
+    "sandslash",
+    "arbok",
+    "machamp",
     "slowpoke",
-    "magnemite",
     "farfetchd",
-    "seel",
-    "grimer",
-    "shellder",
-    "gastly",
+    "muk",
     "onix",
     "drowzee",
-    "krabby",
-    "voltorb",
-    "exeggcute",
-    "cubone",
+    "kingler",
+    "marowak",
     "hitmonlee",
     "hitmonchan",
     "lickitung",
-    "koffing",
-    "rhyhorn",
-    "horsea",
-    "goldeen",
-    "staryu",
-    "kangaskhan",
-    "ditto",
-    "eevee",
-    "porygon",
+    "weezing",
+    "tentacool",
     "omanyte",
-    "kabuto",
-    # Evolved forms that are still weak
-    "wigglytuff",
-    "golbat",
-    "parasect",
-    "dugtrio",
-    "primeape",
-    "poliwhirl",
-    "kadabra",
+    "flareon",
+    "ditto",
+    "poliwag",
+    "dragonair",
 }
 
 
@@ -185,7 +167,7 @@ def load_tiers(gen: int, force_fetch: bool = False) -> dict[str, str]:
         if cached is not None:
             return cached  # type: ignore[return-value]
 
-    # Try to fetch from smogon/data repo
+    # Try to fetch from smogon/pokemon-showdown repo
     try:
         import requests
 
@@ -193,8 +175,7 @@ def load_tiers(gen: int, force_fetch: bool = False) -> dict[str, str]:
         if url:
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
-            raw = resp.json()
-            tiers = _parse_smogon_data(raw)
+            tiers = _parse_ps_formats_data(resp.text)
             disk_cache.put("smogon", cache_key, tiers)
             log.info("Smogon tier data fetched for Gen %d (%d entries)", gen, len(tiers))
             return tiers
@@ -210,12 +191,51 @@ def load_tiers(gen: int, force_fetch: bool = False) -> dict[str, str]:
     return {}
 
 
+def _parse_ps_formats_data(text: str) -> dict[str, str]:
+    """
+    Parse a Pokemon Showdown formats-data.ts file into {name: tier}.
+
+    The TypeScript source has blocks like:
+        pokemonname: {
+            tier: "OU",
+        },
+    We extract names and tier values using a simple line-by-line scan.
+    Non-standard entries (Illegal, NFE, LC, ZU, ZUBL, UUBL, etc.) are
+    mapped to our internal tier scale or dropped.
+    """
+    import re
+
+    result: dict[str, str] = {}
+    current_name: str | None = None
+    for line in text.splitlines():
+        # Match a top-level entry key:  \tpokemonname: {
+        name_match = re.match(r"^\t(\w+):\s*\{", line)
+        if name_match:
+            current_name = name_match.group(1)
+            continue
+        # Match a tier value inside the current block:  \t\ttier: "OU",
+        tier_match = re.match(r'^\t\ttier:\s*"([^"]+)"', line)
+        if tier_match and current_name is not None:
+            normalized = _normalize_tier(tier_match.group(1))
+            if normalized:
+                result[_normalize_name(current_name)] = normalized
+            current_name = None
+            continue
+        # Any other property resets interest in the current entry
+        if re.match(r"^\t\t\w+:", line):
+            current_name = None
+    return result
+
+
 def _parse_smogon_data(raw: dict) -> dict[str, str]:
     """
-    Parse the smogon/data JSON format into {name: tier}.
+    Parse the old smogon/data JSON format into {name: tier}.
     The smogon/data JSON has entries like:
       { "Pokemon": { "tier": "OU", ... }, ... }
     or a flat { "name": "tier" } mapping.
+
+    Kept for backwards compatibility with any cached JSON files written
+    by earlier versions of this loader.
     """
     result: dict[str, str] = {}
     for name, entry in raw.items():
@@ -227,15 +247,29 @@ def _parse_smogon_data(raw: dict) -> dict[str, str]:
 
 
 def _normalize_tier(tier: str) -> str | None:
-    """Map raw Smogon tier strings to our internal tier keys."""
+    """
+    Map raw Pokemon Showdown tier strings to our internal tier keys.
+
+    BL (borderline) tiers are placed in the tier above:
+      UUBL -> ou, RUBL -> uu, NUBL -> ru, PUBL -> nu, ZUBL -> pu
+    ZU maps to pu (the lowest fully-supported tier in our scale).
+    LC, NFE, Illegal, AG, and other non-standard strings are dropped.
+    """
     mapping = {
         "uber": "ubers",
         "ubers": "ubers",
         "ou": "ou",
+        "uubl": "ou",
         "uu": "uu",
+        "rubl": "uu",
         "ru": "ru",
+        "nubl": "ru",
         "nu": "nu",
+        "publ": "nu",
         "pu": "pu",
+        "zubl": "pu",
+        "zu": "pu",
+        # parenthesised "almost" variants count as that tier
         "(ou)": "ou",
         "(uu)": "uu",
         "(ru)": "ru",

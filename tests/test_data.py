@@ -51,9 +51,34 @@ class TestDiskCache:
         monkeypatch.setattr(disk_cache, "_CACHE_ROOT", tmp_path)
         disk_cache.put("ns", "a", {"v": 1})
         disk_cache.put("ns", "b", {"v": 2})
-        disk_cache.clear("ns")
+        removed = disk_cache.clear("ns")
+        assert removed == 2
         assert disk_cache.get("ns", "a") is None
         assert disk_cache.get("ns", "b") is None
+
+    def test_clear_all_removes_all_namespaces(self, tmp_path, monkeypatch):
+        """clear() with no argument should remove files across all namespaces."""
+        monkeypatch.setattr(disk_cache, "_CACHE_ROOT", tmp_path)
+        disk_cache.put("ns1", "x", {"v": 1})
+        disk_cache.put("ns2", "y", {"v": 2})
+        removed = disk_cache.clear()
+        assert removed == 2
+        assert disk_cache.get("ns1", "x") is None
+        assert disk_cache.get("ns2", "y") is None
+
+    def test_cache_size_counts_files(self, tmp_path, monkeypatch):
+        """cache_size should return a namespace -> count mapping."""
+        monkeypatch.setattr(disk_cache, "_CACHE_ROOT", tmp_path)
+        disk_cache.put("smogon", "gen1_tiers", {"a": "ou"})
+        disk_cache.put("smogon", "gen2_tiers", {"b": "uu"})
+        disk_cache.put("pokeapi", "bulbasaur", {"id": 1})
+        sizes = disk_cache.cache_size()
+        assert sizes == {"smogon": 2, "pokeapi": 1}
+
+    def test_cache_size_empty(self, tmp_path, monkeypatch):
+        """cache_size should return an empty dict when nothing is cached."""
+        monkeypatch.setattr(disk_cache, "_CACHE_ROOT", tmp_path)
+        assert disk_cache.cache_size() == {}
 
 
 class TestNormalizeTier:
@@ -127,15 +152,15 @@ class TestGen1Fallback:
         tiers = _build_gen1_fallback()
         assert tiers.get("mewtwo") == "ubers"
 
-    def test_charizard_is_uu(self):
-        """Charizard should be placed in the 'uu' tier."""
+    def test_charizard_is_nu(self):
+        """Charizard should be placed in the 'nu' tier per current PS Gen 1 data."""
         tiers = _build_gen1_fallback()
-        assert tiers.get("charizard") == "uu"
+        assert tiers.get("charizard") == "nu"
 
-    def test_rattata_is_pu(self):
-        """Rattata should be placed in the 'pu' tier."""
+    def test_nidoking_is_pu(self):
+        """Nidoking should be placed in the 'pu' tier per current PS Gen 1 data."""
         tiers = _build_gen1_fallback()
-        assert tiers.get("rattata") == "pu"
+        assert tiers.get("nidoking") == "pu"
 
     def test_all_values_are_valid_tiers(self):
         """Every tier value in the fallback map should be a member of TIERS."""

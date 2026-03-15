@@ -361,6 +361,7 @@ name = "pokerena"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "platformdirs" },
     { name = "requests" },
     { name = "tqdm" },
 ]
@@ -376,6 +377,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "platformdirs", specifier = ">=4.0" },
     { name = "requests", specifier = ">=2.31" },
     { name = "tqdm", specifier = ">=4.66" },
 ]

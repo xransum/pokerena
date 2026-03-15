@@ -209,6 +209,7 @@ __marimo__/
 # pokerena -- cache and results are local, keep directory stubs only
 cache/pokeapi/*.json
 cache/smogon/*.json
+pokerena/cache/
 results/gen*/
 !results/.gitkeep
 
