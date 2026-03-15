@@ -183,30 +183,45 @@ moveset of 4 is chosen as:
 
 ### Battle mechanics
 
-Every battle is a Level 100, 1v1 simulation capped at 60 turns.
+Every battle is a Level 100, 1v1 simulation capped at 60 turns. The engine is
+**fully deterministic** by default -- the same two Pokemon always produce the
+same result, making outcomes a pure reflection of relative strength rather than
+luck.
 
 **Damage formula (Gen 6, default):**
 ```
-floor((((2*L/5 + 2) * Power * Atk/Def) / 50 + 2) * STAB * TypeMult * CritMult * Rand)
+floor((((2*L/5 + 2) * Power * Atk/Def) / 50) + 2) * STAB * TypeMult * AccWeight
 ```
 
 - STAB: 1.5x when move type matches attacker type
 - Type multiplier: full 18-type Gen 6 chart including immunities (0x, 0.25x, 0.5x, 1x, 2x, 4x)
-- Critical hit: 1.5x at 1/24 chance (Gen 6 base rate)
-- Random factor: +/- 5%
+- AccWeight: `accuracy / 100` applied as an expected-value multiplier (no binary miss roll)
+- No random damage noise, no critical hits
 - Burn halves physical attack damage
 - Minimum 1 damage on non-immune hits
 
-**Status conditions:** burn (1/16 max HP per turn), poison (1/8 per turn),
-paralysis (25% skip chance, halved speed), sleep (random 1-3 turn duration),
-freeze (20% thaw chance per turn).
+**Status conditions:**
+
+| Status | Effect |
+|--------|--------|
+| Burn | 1/16 max HP per turn; physical damage halved |
+| Poison | 1/8 max HP per turn |
+| Paralysis | Speed halved (may change turn order); no random skip |
+| Sleep | Blocks action for exactly 2 turns, then clears |
+| Freeze | Blocks action for exactly 2 turns, then clears |
 
 **Type immunities on status:** Fire cannot be burned, Poison/Steel cannot be
 poisoned, Electric cannot be paralyzed, Ice cannot be frozen.
 
-**Strategic AI:** chooses a status move 25% of the time when the defender has
-no active status condition; otherwise picks the highest-scoring damaging move
-with 5% random noise.
+**AI move selection:** each turn the AI picks the damaging move with the
+highest expected output (`power x STAB x type_effectiveness x acc_weight`).
+An offensive status move (one that applies a debuff or inflicts a status
+condition on the opponent) is preferred over attacking when the AI cannot
+one-shot the opponent and the opponent has no status yet. Pure self-utility
+moves like Recover are never chosen over attacking.
+
+**Speed ties** (identical speed after paralysis halving) are broken by an RNG
+coin flip -- the only non-deterministic element when `--rand-ivs` is not used.
 
 **Gen 1 mode (`--gen1-mode`):** uses the Gen 1 stat formula
 (`floor(((Base + IV) * 2 * Level) / 100) + 5`) instead of the Gen 3+ formula.
@@ -285,10 +300,10 @@ uv sync
 uv run pytest
 
 # Lint and format check
-uv run nox -p 3.11 -s pre-commit
+uv run nox -p 3.13 -s pre-commit
 
 # Fast test feedback (no coverage)
-uv run nox -p 3.11 -s tests
+uv run nox -p 3.13 -s tests
 ```
 
 Coverage is enforced at 80% minimum. `cli.py`, `loader.py`, `pokeapi.py`,
