@@ -11,6 +11,7 @@ Responsible for:
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pokerena.data import pokeapi, smogon
 from pokerena.models import Move, Pokemon
@@ -32,6 +33,11 @@ _AILMENT_MAP = {
 # Loading all moves would require hundreds of extra API calls per Pokemon.
 # We cap at the top N by power heuristic from the move list names.
 _MAX_MOVE_FETCH = 30
+
+# Number of concurrent threads used when fetching from PokeAPI.
+# PokeAPI has no rate limit (static hosting since 2018), so higher values
+# are safe. 20 is a good balance between speed and courtesy.
+_FETCH_WORKERS = 20
 
 
 def _parse_move(raw: dict) -> Move | None:
@@ -128,6 +134,56 @@ def _select_moveset(move_names: list[str], user_types: list[str]) -> list[Move]:
     return chosen[:4]
 
 
+def _load_one_entry(name: str, tier_map: dict[str, str]) -> Pokemon | None:
+    """
+    Fetch and assemble a single Pokemon by name.
+    Returns None on unrecoverable error (caller should log and skip).
+    Safe to call from multiple threads -- all I/O goes through _fetch_cached
+    which is thread-safe (disk writes are atomic enough for our purposes).
+    """
+    try:
+        pdata = pokeapi.fetch_pokemon(name)
+        base_stats = pokeapi.parse_base_stats(pdata)
+        types = pokeapi.parse_types(pdata)
+        move_names = pokeapi.get_candidate_move_names(pdata)
+        generation = pokeapi.get_generation_number(pdata)
+        tier = smogon.assign_tier(name, tier_map)
+        moves = _select_moveset(move_names, types)
+
+        try:
+            species_data = pokeapi.fetch_species(name)
+            chain_url = species_data["evolution_chain"]["url"]
+            chain_data = pokeapi.fetch_evolution_chain(chain_url)
+            lines = pokeapi.get_evo_lines(chain_data)
+            evo_line: list[str] = [name]
+            evo_stage = 0
+            for line in lines:
+                if name in line:
+                    evo_line = line
+                    evo_stage = line.index(name)
+                    break
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Evo line lookup failed for %s: %s", name, exc)
+            evo_line = [name]
+            evo_stage = 0
+
+        bst = sum(base_stats.values())
+        return Pokemon(
+            name=name,
+            types=types,
+            base_stats=base_stats,
+            moves=moves,
+            generation=generation,
+            smogon_tier=tier,
+            bst=bst,
+            evo_line=evo_line,
+            evo_stage=evo_stage,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Failed to load %s: %s", name, exc)
+        return None
+
+
 def load_all(gen: int, force_fetch: bool = False) -> list[Pokemon]:
     """
     Load all Pokemon for a given generation.
@@ -155,10 +211,8 @@ def load_all(gen: int, force_fetch: bool = False) -> list[Pokemon]:
     all_species = pokeapi.fetch_pokemon_list(limit=dex_end)
     species_for_gen = all_species[dex_start - 1 : dex_end]
 
-    # Pre-build evo line cache
-    evo_lines: dict[str, list[str]] = {}  # name -> ordered line
+    results: list[Pokemon | None] = [None] * len(species_for_gen)
 
-    pokemon_list: list[Pokemon] = []
     with tqdm(
         total=len(species_for_gen),
         unit="mon",
@@ -166,60 +220,18 @@ def load_all(gen: int, force_fetch: bool = False) -> list[Pokemon]:
         dynamic_ncols=True,
         leave=False,
     ) as bar:
-        for entry in species_for_gen:
-            name = entry["name"]
-            bar.set_postfix_str(name, refresh=False)
-            try:
-                pdata = pokeapi.fetch_pokemon(name)
-                base_stats = pokeapi.parse_base_stats(pdata)
-                types = pokeapi.parse_types(pdata)
-                move_names = pokeapi.get_candidate_move_names(pdata)
-                generation = pokeapi.get_generation_number(pdata)
-                tier = smogon.assign_tier(name, tier_map)
-
-                moves = _select_moveset(move_names, types)
-
-                # Evolutionary line
-                try:
-                    species_data = pokeapi.fetch_species(name)
-                    chain_url = species_data["evolution_chain"]["url"]
-                    chain_data = pokeapi.fetch_evolution_chain(chain_url)
-                    lines = pokeapi.get_evo_lines(chain_data)
-                    # Find the line that contains this Pokemon
-                    evo_line: list[str] = [name]
-                    evo_stage = 0
-                    for line in lines:
-                        if name in line:
-                            evo_line = line
-                            evo_stage = line.index(name)
-                            break
-                    # Cache all members of this line
-                    for member in evo_line:
-                        evo_lines[member] = evo_line
-                except Exception as exc:  # noqa: BLE001
-                    log.debug("Evo line lookup failed for %s: %s", name, exc)
-                    evo_line = [name]
-                    evo_stage = 0
-
-                bst = sum(base_stats.values())
-                poke = Pokemon(
-                    name=name,
-                    types=types,
-                    base_stats=base_stats,
-                    moves=moves,
-                    generation=generation,
-                    smogon_tier=tier,
-                    bst=bst,
-                    evo_line=evo_line,
-                    evo_stage=evo_stage,
-                )
-                pokemon_list.append(poke)
-                log.debug("Loaded %s [%s] tier=%s bst=%d", name, "/".join(types), tier, bst)
-
-            except Exception as exc:  # noqa: BLE001
-                log.warning("Failed to load %s: %s", name, exc)
-            finally:
+        with ThreadPoolExecutor(max_workers=_FETCH_WORKERS) as pool:
+            future_to_idx = {
+                pool.submit(_load_one_entry, entry["name"], tier_map): i
+                for i, entry in enumerate(species_for_gen)
+            }
+            for fut in as_completed(future_to_idx):
+                idx = future_to_idx[fut]
+                name = species_for_gen[idx]["name"]
+                bar.set_postfix_str(name, refresh=False)
+                results[idx] = fut.result()
                 bar.update(1)
 
+    pokemon_list = [p for p in results if p is not None]
     log.info("Loaded %d Pokemon for Gen %d", len(pokemon_list), gen)
     return pokemon_list

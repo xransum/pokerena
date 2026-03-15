@@ -8,7 +8,6 @@ Never hits the network during simulation if cache is warm.
 from __future__ import annotations
 
 import logging
-import time
 
 import requests
 
@@ -17,7 +16,6 @@ from pokerena.data import cache as disk_cache
 log = logging.getLogger(__name__)
 
 _BASE = "https://pokeapi.co/api/v2"
-_RATE_DELAY = 0.05  # seconds between requests to be polite
 
 
 def _get(url: str) -> dict:
@@ -35,7 +33,6 @@ def _fetch_cached(namespace: str, key: str, url: str) -> dict:
     log.debug("Fetching %s", url)
     data = _get(url)
     disk_cache.put(namespace, key, data)
-    time.sleep(_RATE_DELAY)
     return data
 
 
