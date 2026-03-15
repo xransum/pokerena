@@ -211,3 +211,6 @@ cache/pokeapi/*.json
 cache/smogon/*.json
 results/gen*/
 !results/.gitkeep
+
+# uv
+.venv/
