@@ -8,6 +8,7 @@ Usage:
   pokerena cache info               show cached namespaces and file counts
   pokerena cache clear              delete all cached data
   pokerena cache clear smogon       delete only the smogon namespace
+  pokerena search                   list and filter Pokemon by name/type/tier/gen/BST
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from pokerena.data.loader import load_all
 
 if TYPE_CHECKING:
     from pokerena.models import Pokemon
-from pokerena.models import TIER_ORDER
+from pokerena.models import TIER_ORDER, TIERS
 from pokerena.report import console as con
 from pokerena.report import writers
 from pokerena.tournament.runner import run_full_tournament
@@ -99,6 +100,86 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="NAMESPACE",
         help="Namespace to clear (e.g. smogon, pokeapi). Omit to clear everything.",
+    )
+
+    # -- search sub-command
+    search_p = sub.add_parser(
+        "search",
+        help="List and filter Pokemon by name, type, tier, gen, or BST.",
+    )
+    search_p.add_argument(
+        "name",
+        nargs="?",
+        default=None,
+        metavar="NAME",
+        help="Substring to match against Pokemon names (case-insensitive).",
+    )
+    search_p.add_argument(
+        "--gen",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Filter to a specific generation (1-9). Omit to search all gens.",
+    )
+    search_p.add_argument(
+        "--type",
+        dest="type_filter",
+        default=None,
+        metavar="TYPE",
+        help="Filter by type (e.g. fire, water, grass). Matches either type slot.",
+    )
+    search_p.add_argument(
+        "--tier",
+        default=None,
+        metavar="TIER",
+        help=f"Filter by Smogon tier ({', '.join(TIERS)}).",
+    )
+    search_p.add_argument(
+        "--min-bst",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Only show Pokemon with BST >= N.",
+    )
+    search_p.add_argument(
+        "--max-bst",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Only show Pokemon with BST <= N.",
+    )
+    search_p.add_argument(
+        "--sort",
+        default="name",
+        choices=[
+            "name",
+            "bst",
+            "tier",
+            "gen",
+            "hp",
+            "attack",
+            "defense",
+            "sp_atk",
+            "sp_def",
+            "speed",
+        ],
+        metavar="FIELD",
+        help=(
+            "Sort results by field. Choices: name, bst, tier, gen, "
+            "hp, attack, defense, sp_atk, sp_def, speed. Default: name"
+        ),
+    )
+    search_p.add_argument(
+        "--desc",
+        action="store_true",
+        help="Reverse the sort order (descending).",
+    )
+    search_p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Maximum number of results to show.",
     )
 
     # -- simulate options (the default command when none is given)
@@ -276,6 +357,121 @@ def _cmd_battle(args: argparse.Namespace) -> None:
     print()
 
 
+def _cmd_search(args: argparse.Namespace) -> None:
+    """Load one or all generation rosters and print a filtered, sorted table."""
+    from pokerena.models import TIER_LABELS, TIER_ORDER
+
+    # Normalise filter inputs
+    name_q = args.name.lower().strip() if args.name else None
+    type_q = args.type_filter.lower().strip() if args.type_filter else None
+    tier_q = args.tier.lower().strip() if args.tier else None
+
+    # Validate tier filter early so the user gets a clear message
+    if tier_q and tier_q not in TIERS:
+        valid = ", ".join(TIERS)
+        print(f"Unknown tier '{tier_q}'. Valid tiers: {valid}")
+        return
+
+    # Determine which gens to load
+    gens = [args.gen] if args.gen else list(range(1, 10))
+
+    # Load rosters; deduplicate by name (higher gens re-include lower-gen Pokemon)
+    seen: set[str] = set()
+    roster: list = []
+    for gen in gens:
+        print(f"Loading Gen {gen}...")
+        for p in load_all(gen):
+            if p.name not in seen:
+                seen.add(p.name)
+                roster.append(p)
+
+    if not roster:
+        print("No Pokemon loaded.")
+        return
+
+    # Apply filters
+    results = roster
+    if name_q:
+        results = [p for p in results if name_q in p.name]
+    if type_q:
+        results = [p for p in results if type_q in p.types]
+    if tier_q:
+        results = [p for p in results if p.smogon_tier == tier_q]
+    if args.min_bst is not None:
+        results = [p for p in results if p.bst >= args.min_bst]
+    if args.max_bst is not None:
+        results = [p for p in results if p.bst <= args.max_bst]
+
+    if not results:
+        print("No Pokemon matched your filters.")
+        return
+
+    # Sort
+    stat_fields = {"hp", "attack", "defense", "sp_atk", "sp_def", "speed"}
+    sort_key = args.sort
+    tier_rank = {t: i for i, t in enumerate(TIER_ORDER)}  # pu=0 ... ubers=5
+
+    def _sort_key(p):
+        if sort_key == "name":
+            return p.name
+        if sort_key == "bst":
+            return p.bst
+        if sort_key == "tier":
+            return tier_rank.get(p.smogon_tier, -1)
+        if sort_key == "gen":
+            return p.generation
+        if sort_key in stat_fields:
+            return p.base_stats.get(sort_key, 0)
+        return p.name
+
+    results.sort(key=_sort_key, reverse=args.desc)
+
+    if args.limit:
+        results = results[: args.limit]
+
+    # Render table
+    # Columns: Name | Gen | Types | Tier | BST | HP | Atk | Def | SpA | SpD | Spe
+    col_headers = ["Name", "Gen", "Types", "Tier", "BST", "HP", "Atk", "Def", "SpA", "SpD", "Spe"]
+    rows = []
+    for p in results:
+        tier_label = TIER_LABELS.get(p.smogon_tier, p.smogon_tier.upper())
+        types_str = "/".join(t.capitalize() for t in p.types)
+        bs = p.base_stats
+        rows.append(
+            [
+                p.name.capitalize(),
+                str(p.generation),
+                types_str,
+                tier_label,
+                str(p.bst),
+                str(bs.get("hp", 0)),
+                str(bs.get("attack", 0)),
+                str(bs.get("defense", 0)),
+                str(bs.get("sp_atk", 0)),
+                str(bs.get("sp_def", 0)),
+                str(bs.get("speed", 0)),
+            ]
+        )
+
+    # Compute column widths
+    widths = [len(h) for h in col_headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+
+    sep = "  "
+    header_line = sep.join(h.ljust(widths[i]) for i, h in enumerate(col_headers))
+    divider = sep.join("-" * widths[i] for i in range(len(col_headers)))
+
+    print()
+    print(header_line)
+    print(divider)
+    for row in rows:
+        print(sep.join(cell.ljust(widths[i]) for i, cell in enumerate(row)))
+    print()
+    print(f"{len(results)} result{'s' if len(results) != 1 else ''}")
+
+
 def _run_gen(
     gen: int,
     args: argparse.Namespace,
@@ -376,6 +572,10 @@ def main() -> None:
 
     if args.command == "battle":
         _cmd_battle(args)
+        return
+
+    if args.command == "search":
+        _cmd_search(args)
         return
 
     if args.command == "cache":
