@@ -1,5 +1,12 @@
 # pokerena
 
+[![CI](https://github.com/xransum/pokerena/actions/workflows/ci.yml/badge.svg)](https://github.com/xransum/pokerena/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/xransum/pokerena/branch/main/graph/badge.svg)](https://codecov.io/gh/xransum/pokerena)
+[![PyPI](https://img.shields.io/pypi/v/pokerena.svg)](https://pypi.org/project/pokerena/)
+[![Python Version](https://img.shields.io/pypi/pyversions/pokerena)](https://pypi.org/project/pokerena/)
+[![Read the Docs](https://img.shields.io/readthedocs/pokerena/latest.svg?label=Read%20the%20Docs)](https://pokerena.readthedocs.io)
+[![License](https://img.shields.io/pypi/l/pokerena)](https://github.com/xransum/pokerena/blob/main/LICENSE)
+
 A Pokemon battle tournament simulator. Runs millions of simulated battles to
 determine the statistically strongest Pokemon at every competitive tier, then
 compares results against Smogon's 25 years of community tier placements.
