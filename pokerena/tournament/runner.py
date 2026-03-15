@@ -123,12 +123,17 @@ def _run_matchup_worker(args: tuple) -> MatchupRecord:
     """
     Run N battles between two Pokemon and return aggregated MatchupRecord.
     Module-level so it is picklable by ProcessPoolExecutor.
+    Receives gen as an int and reconstructs the rules object inside the worker
+    to avoid pickle edge cases with class instances.
     """
-    a_dict, b_dict, n_battles, rand_ivs, seed, gen1_mode = args
+    a_dict, b_dict, n_battles, rand_ivs, seed, gen = args
 
     # Reconstruct Pokemon from dicts (avoids pickling full objects)
     from pokerena.engine.battle import run_battle
+    from pokerena.engine.rules import RULES_BY_GEN, Gen6Rules
     from pokerena.models import Move, Pokemon
+
+    rules = RULES_BY_GEN.get(gen, Gen6Rules())
 
     def _rebuild_move(d: dict) -> Move:
         """Reconstruct a Move instance from a plain dict."""
@@ -153,7 +158,7 @@ def _run_matchup_worker(args: tuple) -> MatchupRecord:
             b,
             rand_ivs=rand_ivs,
             rng=rng,
-            gen1_mode=gen1_mode,
+            rules=rules,
         )
         record.battles += 1
         if result.winner == a.name:
@@ -203,7 +208,7 @@ def run_tier_tournament(
     rand_ivs: bool = False,
     seed: int | None = None,
     workers: int = 4,
-    gen1_mode: bool = False,
+    gen: int = 6,
     progress: Any = None,
 ) -> tuple[TierLeaderboard, list[MatchupRecord]]:
     """
@@ -234,7 +239,7 @@ def run_tier_tournament(
             n_battles,
             rand_ivs,
             base_seed + i,
-            gen1_mode,
+            gen,
         )
         for i, (a, b) in enumerate(pairs)
     ]
@@ -328,16 +333,19 @@ def run_tiebreaker(
     n_battles: int = 50,
     rand_ivs: bool = False,
     seed: int | None = None,
-    gen1_mode: bool = False,
+    gen: int = 6,
 ) -> str:
     """
     Run a tiebreaker between two tied Pokemon.
     Returns the name of the winner.
     """
+    from pokerena.engine.rules import RULES_BY_GEN, Gen6Rules
+
+    rules = RULES_BY_GEN.get(gen, Gen6Rules())
     rng = random.Random(seed)
     wins_a = wins_b = 0
     for _ in range(n_battles):
-        result = run_battle(a, b, rand_ivs=rand_ivs, rng=rng, gen1_mode=gen1_mode)
+        result = run_battle(a, b, rand_ivs=rand_ivs, rng=rng, rules=rules)
         if result.winner == a.name:
             wins_a += 1
         else:
@@ -353,11 +361,14 @@ def run_playoff(
     n_battles: int = 50,
     rand_ivs: bool = False,
     seed: int | None = None,
-    gen1_mode: bool = False,
+    gen: int = 6,
 ) -> PlayoffResult:
     """
     Run a best-of-N playoff between two tier champions.
     """
+    from pokerena.engine.rules import RULES_BY_GEN, Gen6Rules
+
+    rules = RULES_BY_GEN.get(gen, Gen6Rules())
     rng = random.Random(seed)
     wins_lower = wins_upper = 0
     for _ in range(n_battles):
@@ -366,7 +377,7 @@ def run_playoff(
             upper_champion,
             rand_ivs=rand_ivs,
             rng=rng,
-            gen1_mode=gen1_mode,
+            rules=rules,
         )
         if result.winner == lower_champion.name:
             wins_lower += 1
@@ -394,7 +405,6 @@ def run_grand_final(
     rand_ivs: bool = False,
     seed: int | None = None,
     workers: int = 4,
-    gen1_mode: bool = False,
     progress: Any = None,
 ) -> GrandFinalResult:
     """
@@ -415,7 +425,7 @@ def run_grand_final(
             n_battles,
             rand_ivs,
             base_seed + i,
-            gen1_mode,
+            gen,
         )
         for i, (a, b) in enumerate(pairs)
     ]
@@ -482,7 +492,6 @@ def run_full_tournament(
     rand_ivs: bool = False,
     seed: int | None = None,
     workers: int = 4,
-    gen1_mode: bool = False,
     progress: Any = None,
 ) -> dict:
     """
@@ -516,7 +525,7 @@ def run_full_tournament(
             rand_ivs=rand_ivs,
             seed=seed,
             workers=workers,
-            gen1_mode=gen1_mode,
+            gen=gen,
             progress=progress,
         )
         lb.gen = gen
@@ -536,7 +545,7 @@ def run_full_tournament(
                 n_battles=50,
                 rand_ivs=rand_ivs,
                 seed=seed,
-                gen1_mode=gen1_mode,
+                gen=gen,
             )
             if winner_name == b.name:
                 lb.entries[0], lb.entries[1] = lb.entries[1], lb.entries[0]
@@ -569,7 +578,7 @@ def run_full_tournament(
             n_battles=n_battles_phase2,
             rand_ivs=rand_ivs,
             seed=seed,
-            gen1_mode=gen1_mode,
+            gen=gen,
         )
         results["playoffs"].append(pr)
         if progress is not None:
@@ -607,7 +616,6 @@ def run_full_tournament(
             rand_ivs=rand_ivs,
             seed=seed,
             workers=workers,
-            gen1_mode=gen1_mode,
             progress=progress,
         )
         results["grand_final"] = gf

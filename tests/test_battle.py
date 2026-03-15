@@ -16,6 +16,7 @@ from pokerena.engine.battle import (
     _status_is_advantageous,
     run_battle,
 )
+from pokerena.engine.rules import Gen1Rules, Gen2Rules, Gen3Rules, Gen6Rules
 from pokerena.engine.stats import initialize_battle_state
 from pokerena.models import Move, Pokemon
 
@@ -599,3 +600,157 @@ class TestRunBattleEdgePaths:
         # at least 1 turn); verify the battle completes
         result = run_battle(burner, target, rng=random.Random(0))
         assert isinstance(result, BattleResult)
+
+
+class TestGenRules:
+    """Tests that generation-specific rules produce correct type chart and stat values."""
+
+    def _make_pokemon(self, name: str, types: list, base_stats: dict, moves: list) -> Pokemon:
+        return Pokemon(
+            name=name,
+            types=types,
+            base_stats=base_stats,
+            moves=moves,
+            generation=1,
+            smogon_tier="ou",
+            bst=sum(base_stats.values()),
+        )
+
+    def test_gen1_ghost_vs_psychic_is_zero(self):
+        """Ghost attacking Psychic should be 0x in Gen 1 (famous bug)."""
+        rules = Gen1Rules()
+        assert rules.type_chart.multiplier("ghost", ["psychic"]) == 0.0
+
+    def test_gen2_ghost_vs_psychic_is_two(self):
+        """Ghost attacking Psychic should be 2x in Gen 2+ (bug fixed)."""
+        rules = Gen2Rules()
+        assert rules.type_chart.multiplier("ghost", ["psychic"]) == 2.0
+
+    def test_gen6_ghost_vs_psychic_is_two(self):
+        """Ghost attacking Psychic should still be 2x in Gen 6."""
+        rules = Gen6Rules()
+        assert rules.type_chart.multiplier("ghost", ["psychic"]) == 2.0
+
+    def test_gen1_poison_vs_bug_is_two(self):
+        """Poison attacking Bug should be 2x in Gen 1."""
+        rules = Gen1Rules()
+        assert rules.type_chart.multiplier("poison", ["bug"]) == 2.0
+
+    def test_gen2_poison_vs_bug_is_half(self):
+        """Poison attacking Bug should be 0.5x in Gen 2+."""
+        rules = Gen2Rules()
+        assert rules.type_chart.multiplier("poison", ["bug"]) == 0.5
+
+    def test_gen1_ice_vs_fire_is_one(self):
+        """Ice attacking Fire should be 1x (neutral) in Gen 1."""
+        rules = Gen1Rules()
+        assert rules.type_chart.multiplier("ice", ["fire"]) == 1.0
+
+    def test_gen2_ice_vs_fire_is_half(self):
+        """Ice attacking Fire should be 0.5x in Gen 2+."""
+        rules = Gen2Rules()
+        assert rules.type_chart.multiplier("ice", ["fire"]) == 0.5
+
+    def test_gen2_ghost_vs_steel_is_zero(self):
+        """Ghost attacking Steel should be 0x (immune) in Gen 2-5."""
+        rules = Gen2Rules()
+        assert rules.type_chart.multiplier("ghost", ["steel"]) == 0.0
+
+    def test_gen6_ghost_vs_steel_is_half(self):
+        """Ghost attacking Steel should be 0.5x in Gen 6+ (immunity removed)."""
+        rules = Gen6Rules()
+        assert rules.type_chart.multiplier("ghost", ["steel"]) == 0.5
+
+    def test_gen2_dark_vs_steel_is_zero(self):
+        """Dark attacking Steel should be 0x (immune) in Gen 2-5."""
+        rules = Gen2Rules()
+        assert rules.type_chart.multiplier("dark", ["steel"]) == 0.0
+
+    def test_gen6_dark_vs_steel_is_half(self):
+        """Dark attacking Steel should be 0.5x in Gen 6+ (immunity removed)."""
+        rules = Gen6Rules()
+        assert rules.type_chart.multiplier("dark", ["steel"]) == 0.5
+
+    def test_gen6_fairy_type_exists(self):
+        """Fairy type should exist in Gen 6 chart -- Dragon vs Fairy is 0x."""
+        rules = Gen6Rules()
+        assert rules.type_chart.multiplier("dragon", ["fairy"]) == 0.0
+
+    def test_gen1_no_fairy_type(self):
+        """Gen 1 type chart does not have Fairy -- Dragon vs Fairy should be 1x (neutral)."""
+        rules = Gen1Rules()
+        assert rules.type_chart.multiplier("dragon", ["fairy"]) == 1.0
+
+    def test_gen1_stat_formula_produces_correct_value(self):
+        """Gen 1/2 stat formula: non-HP = floor(((base+iv)*2*level)/100) + 5."""
+        rules = Gen1Rules()
+        # base=100, iv=31, level=100 -> floor((131*2*100)/100) + 5 = 262 + 5 = 267
+        assert rules.compute_stat(base=100, iv=31, level=100, is_hp=False) == 267
+
+    def test_gen3_stat_formula_produces_correct_value(self):
+        """Gen 3+ stat formula: non-HP = floor((2*base+iv)*level/100) + 5."""
+        rules = Gen3Rules()
+        # base=100, iv=31, level=100 -> floor((200+31)*100/100) + 5 = 231 + 5 = 236
+        assert rules.compute_stat(base=100, iv=31, level=100, is_hp=False) == 236
+
+    def test_gen1_hp_formula(self):
+        """Gen 1/2 HP formula: floor(((base+iv)*2*level)/100) + level + 10."""
+        rules = Gen1Rules()
+        # base=100, iv=31, level=100 -> 262 + 100 + 10 = 372
+        assert rules.compute_stat(base=100, iv=31, level=100, is_hp=True) == 372
+
+    def test_gen3_hp_formula(self):
+        """Gen 3+ HP formula: floor((2*base+iv)*level/100) + level + 10."""
+        rules = Gen3Rules()
+        # base=100, iv=31, level=100 -> 231 + 100 + 10 = 341
+        assert rules.compute_stat(base=100, iv=31, level=100, is_hp=True) == 341
+
+    def test_gen1_battle_uses_gen1_type_chart(self):
+        """run_battle with Gen1Rules should treat Ghost vs Psychic as 0x damage."""
+        gen1 = Gen1Rules()
+        ghost_attacker = self._make_pokemon(
+            "gengar",
+            ["ghost", "poison"],
+            {"hp": 60, "attack": 65, "defense": 60, "sp_atk": 130, "sp_def": 75, "speed": 110},
+            [Move("shadow-ball", "ghost", "special", 80, 100, 15)],
+        )
+        psychic_defender = self._make_pokemon(
+            "alakazam",
+            ["psychic"],
+            {"hp": 55, "attack": 50, "defense": 45, "sp_atk": 135, "sp_def": 95, "speed": 120},
+            [Move("psychic", "psychic", "special", 90, 100, 10)],
+        )
+        a = initialize_battle_state(ghost_attacker, rules=gen1)
+        d = initialize_battle_state(psychic_defender, rules=gen1)
+        shadow_ball = Move("shadow-ball", "ghost", "special", 80, 100, 15)
+        assert _calc_damage(a, d, shadow_ball, rules=gen1) == 0.0
+
+    def test_gen2_battle_uses_corrected_type_chart(self):
+        """run_battle with Gen2Rules should treat Ghost vs Psychic as 2x damage."""
+        gen2 = Gen2Rules()
+        ghost_attacker = self._make_pokemon(
+            "gengar",
+            ["ghost", "poison"],
+            {"hp": 60, "attack": 65, "defense": 60, "sp_atk": 130, "sp_def": 75, "speed": 110},
+            [Move("shadow-ball", "ghost", "special", 80, 100, 15)],
+        )
+        neutral_defender = self._make_pokemon(
+            "normal-mon",
+            ["normal"],
+            {"hp": 60, "attack": 65, "defense": 60, "sp_atk": 130, "sp_def": 75, "speed": 110},
+            [Move("tackle", "normal", "physical", 40, 100, 35)],
+        )
+        psychic_defender = self._make_pokemon(
+            "alakazam",
+            ["psychic"],
+            {"hp": 60, "attack": 65, "defense": 60, "sp_atk": 130, "sp_def": 75, "speed": 110},
+            [Move("psychic", "psychic", "special", 90, 100, 10)],
+        )
+        shadow_ball = Move("shadow-ball", "ghost", "special", 80, 100, 15)
+        a = initialize_battle_state(ghost_attacker, rules=gen2)
+        d_neutral = initialize_battle_state(neutral_defender, rules=gen2)
+        d_psychic = initialize_battle_state(psychic_defender, rules=gen2)
+        dmg_neutral = _calc_damage(a, d_neutral, shadow_ball, rules=gen2)
+        dmg_psychic = _calc_damage(a, d_psychic, shadow_ball, rules=gen2)
+        # Ghost-type STAB vs Psychic should be more than 2x neutral (STAB * 2x = 3x effective)
+        assert dmg_psychic > dmg_neutral

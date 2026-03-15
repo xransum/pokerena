@@ -1,10 +1,8 @@
 """
 Stat calculator -- computes final battle stats from base stats and IVs.
 
-Implements the authentic formula used in the main series games.
-Gen 1/2 use a slightly different HP formula but we unify under the
-modern formula (Gen 3+) since we default to Gen 6 mechanics.
-The gen1_mode flag switches to the original formula for accuracy.
+The stat formula is generation-dependent and is delegated to the BattleRules
+object passed in. See pokerena.engine.rules for the per-gen formula details.
 """
 
 from __future__ import annotations
@@ -22,35 +20,28 @@ def compute_stats(
     pokemon: Pokemon,
     level: int = 100,
     ivs: dict[str, int] | None = None,
-    gen1_mode: bool = False,
+    rules=None,
 ) -> dict[str, int]:
     """
     Compute final battle stats for a Pokemon at a given level.
 
-    Gen 3+ formula:
-      non-HP stat = floor(((2 * Base + IV) * Level / 100) + 5)
-      HP          = floor(((2 * Base + IV) * Level / 100) + Level + 10)
-
-    Gen 1 formula (gen1_mode=True):
-      non-HP stat = floor(((Base + IV) * 2 * Level) / 100) + 5
-      HP          = floor(((Base + IV) * 2 * Level) / 100) + Level + 10
+    Delegates the per-stat formula to rules.compute_stat().
+    Defaults to Gen 6 rules when rules is None.
 
     IVs default to MAX_IV (31) if not provided.
     """
+    if rules is None:
+        from pokerena.engine.rules import Gen6Rules
+
+        rules = Gen6Rules()
+
     if ivs is None:
         ivs = dict.fromkeys(pokemon.base_stats, MAX_IV)
 
     stats: dict[str, int] = {}
     for stat_name, base in pokemon.base_stats.items():
         iv = ivs.get(stat_name, MAX_IV)
-        value = ((base + iv) * 2 * level) // 100 if gen1_mode else (2 * base + iv) * level // 100
-
-        if stat_name == "hp":
-            value += level + 10
-        else:
-            value += 5
-
-        stats[stat_name] = max(1, value)
+        stats[stat_name] = rules.compute_stat(base, iv, level, is_hp=(stat_name == "hp"))
 
     return stats
 
@@ -71,14 +62,14 @@ def initialize_battle_state(
     pokemon: Pokemon,
     level: int = 100,
     ivs: dict[str, int] | None = None,
-    gen1_mode: bool = False,
+    rules=None,
 ) -> Pokemon:
     """
     Return a deep copy of the Pokemon with computed battle stats and full HP.
     Resets all status conditions and stat stages.
     """
     p = copy.deepcopy(pokemon)
-    p.stats = compute_stats(p, level=level, ivs=ivs, gen1_mode=gen1_mode)
+    p.stats = compute_stats(p, level=level, ivs=ivs, rules=rules)
     p.max_hp = p.stats["hp"]
     p.current_hp = p.max_hp
     p.status = None

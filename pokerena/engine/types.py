@@ -1,5 +1,9 @@
 """
-Type chart -- full 18-type Gen 6 effectiveness table.
+Type chart -- type effectiveness lookup.
+
+TypeChart accepts a chart dict at construction time so each generation can
+supply its own matchup data. The module-level TYPE_CHART singleton uses the
+Gen 6 chart and is kept for backwards compatibility.
 
 multiplier(attacking_type, defender_types) returns the combined effectiveness
 multiplier (e.g. 2.0, 0.5, 0.0, 4.0).
@@ -174,17 +178,25 @@ _CHART: dict[str, dict[str, float]] = {
 
 
 class TypeChart:
-    """Immutable Gen 6 type effectiveness lookup."""
+    """
+    Type effectiveness lookup for a specific generation.
+
+    Accepts a chart dict at construction time. Each gen's BattleRules
+    subclass passes its own chart so matchups are generation-accurate.
+    """
+
+    def __init__(self, chart: dict[str, dict[str, float]] | None = None) -> None:
+        self._chart = chart if chart is not None else _CHART
 
     def multiplier(self, attacking_type: str, defender_types: list[str]) -> float:
         """
         Return combined type effectiveness multiplier.
         Chains multipliers for each defender type independently.
         """
-        chart = _CHART.get(attacking_type, {})
+        row = self._chart.get(attacking_type, {})
         result = 1.0
         for def_type in defender_types:
-            result *= chart.get(def_type, 1.0)
+            result *= row.get(def_type, 1.0)
         return result
 
     def is_immune(self, attacking_type: str, defender_types: list[str]) -> bool:
@@ -192,5 +204,5 @@ class TypeChart:
         return self.multiplier(attacking_type, defender_types) == 0.0
 
 
-# Module-level singleton -- import this instead of instantiating.
+# Module-level singleton using the Gen 6 chart -- kept for backwards compatibility.
 TYPE_CHART = TypeChart()

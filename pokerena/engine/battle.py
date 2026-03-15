@@ -2,7 +2,7 @@
 Battle engine -- runs a single 1v1 Pokemon battle.
 
 Implements:
-- Gen 6 damage formula (default)
+- Generation-accurate damage formula and type chart via BattleRules
 - Deterministic AI: always picks the highest expected-damage move
 - Status moves used when they confer a concrete battle advantage
 - All status conditions (burn, paralysis, poison, sleep, freeze)
@@ -17,8 +17,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+from pokerena.engine.rules import BattleRules, Gen6Rules
 from pokerena.engine.stats import initialize_battle_state, random_ivs
-from pokerena.engine.types import TYPE_CHART
 from pokerena.models import Move, Pokemon
 
 MAX_TURNS = 60
@@ -53,9 +53,10 @@ def _calc_damage(
     defender: Pokemon,
     move: Move,
     level: int = 100,
+    rules: BattleRules | None = None,
 ) -> float:
     """
-    Gen 6 damage formula with accuracy weighting.
+    Damage formula with accuracy weighting.
 
       Base = floor((((2*L/5 + 2) * Power * Atk/Def) / 50) + 2)
       Damage = Base * STAB * TypeMultiplier * (accuracy / 100)
@@ -66,6 +67,8 @@ def _calc_damage(
 
     Returns 0.0 for immune matchups.
     """
+    if rules is None:
+        rules = Gen6Rules()
     # Pick attack / defense stats based on move category
     if move.category == "physical":
         atk_stat = "attack"
@@ -87,8 +90,8 @@ def _calc_damage(
     # STAB
     stab = STAB_MULTIPLIER if move.type_ in attacker.types else 1.0
 
-    # Type effectiveness
-    type_mult = TYPE_CHART.multiplier(move.type_, defender.types)
+    # Type effectiveness -- use the rules object's type chart
+    type_mult = rules.type_chart.multiplier(move.type_, defender.types)
     if type_mult == 0.0:
         return 0.0  # immune
 
@@ -171,7 +174,7 @@ def _status_is_advantageous(attacker: Pokemon, defender: Pokemon) -> bool:
     return True
 
 
-def _choose_move(attacker: Pokemon, defender: Pokemon) -> Move:
+def _choose_move(attacker: Pokemon, defender: Pokemon, rules: BattleRules | None = None) -> Move:
     """
     Deterministic AI move selection.
 
@@ -197,7 +200,9 @@ def _choose_move(attacker: Pokemon, defender: Pokemon) -> Move:
         # whether the best damaging move would KO the defender in one hit --
         # if so, just attack; otherwise the status is worth a turn investment.
         if damaging_moves:
-            best_dmg = max(_calc_damage(attacker, defender, m, level=100) for m in damaging_moves)
+            best_dmg = max(
+                _calc_damage(attacker, defender, m, level=100, rules=rules) for m in damaging_moves
+            )
             if best_dmg < defender.current_hp:
                 # Cannot one-shot -- a status debuff is worth applying
                 return offensive_status_moves[0]
@@ -207,7 +212,10 @@ def _choose_move(attacker: Pokemon, defender: Pokemon) -> Move:
     if not damaging_moves:
         return attacker.moves[0]
 
-    return max(damaging_moves, key=lambda m: _calc_damage(attacker, defender, m, level=100))
+    return max(
+        damaging_moves,
+        key=lambda m: _calc_damage(attacker, defender, m, level=100, rules=rules),
+    )
 
 
 def _apply_stat_changes(
@@ -231,7 +239,7 @@ def run_battle(
     level: int = 100,
     rand_ivs: bool = False,
     rng: random.Random | None = None,
-    gen1_mode: bool = False,
+    rules: BattleRules | None = None,
 ) -> BattleResult:
     """
     Run a single battle between two Pokemon.
@@ -241,15 +249,19 @@ def run_battle(
     The battle is fully deterministic when rand_ivs=False (the default).
     With rand_ivs=True an rng is used only for IV generation at the start;
     all in-battle decisions remain deterministic.
+
+    rules defaults to Gen6Rules() when not provided.
     """
+    if rules is None:
+        rules = Gen6Rules()
     if rng is None:
         rng = random.Random()
 
     ivs_a = random_ivs(rng) if rand_ivs else None
     ivs_b = random_ivs(rng) if rand_ivs else None
 
-    a = initialize_battle_state(pokemon_a, level=level, ivs=ivs_a, gen1_mode=gen1_mode)
-    b = initialize_battle_state(pokemon_b, level=level, ivs=ivs_b, gen1_mode=gen1_mode)
+    a = initialize_battle_state(pokemon_a, level=level, ivs=ivs_a, rules=rules)
+    b = initialize_battle_state(pokemon_b, level=level, ivs=ivs_b, rules=rules)
 
     turns = 0
     while turns < MAX_TURNS:
@@ -280,7 +292,7 @@ def run_battle(
             if _check_status_skip(attacker):
                 continue
 
-            move = _choose_move(attacker, defender)
+            move = _choose_move(attacker, defender, rules=rules)
 
             if move.category == "status":
                 if move.status_effect:
@@ -288,7 +300,7 @@ def run_battle(
                 if move.stat_changes:
                     _apply_stat_changes(attacker, defender, move.stat_changes)
             else:
-                dmg = _calc_damage(attacker, defender, move, level=level)
+                dmg = _calc_damage(attacker, defender, move, level=level, rules=rules)
                 defender.current_hp = max(0, defender.current_hp - int(dmg))
                 # Deterministic secondary status: apply if the move has one
                 # and the target is not already statused
@@ -317,7 +329,7 @@ def run_battle(
         winner, loser = a, b
 
     # Check if winner had a type advantage -- check all of winner's types
-    winner_has_adv = any(TYPE_CHART.multiplier(t, loser.types) > 1.0 for t in winner.types)
+    winner_has_adv = any(rules.type_chart.multiplier(t, loser.types) > 1.0 for t in winner.types)
 
     return BattleResult(
         winner=winner.name,

@@ -27,6 +27,7 @@ from pokerena.data.loader import load_all
 
 if TYPE_CHECKING:
     from pokerena.models import Pokemon
+from pokerena.engine.rules import RULES_BY_GEN, Gen9Rules
 from pokerena.models import TIER_ORDER, TIERS
 from pokerena.report import console as con
 from pokerena.report import writers
@@ -123,7 +124,6 @@ def _run_gen(gen: int, args: dict) -> None:
             rand_ivs=args["rand_ivs"],
             seed=args["seed"],
             workers=workers,
-            gen1_mode=args["gen1_mode"],
             progress=bar,
         )
 
@@ -234,6 +234,9 @@ def run(
         pokerena run --gen 1 --rand-ivs --seed 42
     """
     _setup_logging(verbose)
+    # --gen1-mode is a backwards-compat alias for --gen 1
+    if gen1_mode:
+        gen = 1
     args = {
         "battles": battles,
         "rand_ivs": rand_ivs,
@@ -241,7 +244,6 @@ def run(
         "fetch": fetch,
         "top": top,
         "workers": workers,
-        "gen1_mode": gen1_mode,
     }
     if all_gens:
         for g in range(1, 10):
@@ -299,6 +301,9 @@ def battle(
 
     _setup_logging(verbose)
     rng = _random.Random(seed)
+    # --gen1-mode is a backwards-compat alias for --gen 1
+    effective_gen = 1 if gen1_mode else gen
+    rules = RULES_BY_GEN.get(effective_gen, Gen9Rules())
 
     if use_random:
         click.echo(f"Loading Gen {gen} roster...")
@@ -333,7 +338,7 @@ def battle(
     click.echo(f"  {poke_b.name.capitalize()} [{types_b}]  BST {poke_b.bst}  {tier_b}")
     click.echo("")
 
-    result = run_battle(poke_a, poke_b, rand_ivs=rand_ivs, rng=rng, gen1_mode=gen1_mode)
+    result = run_battle(poke_a, poke_b, rand_ivs=rand_ivs, rng=rng, rules=rules)
 
     loser = poke_b.name if result.winner == poke_a.name else poke_a.name
     resolved = "timeout (HP%)" if result.timeout else f"faint in turn {result.turns}"

@@ -2,6 +2,7 @@
 Tests for the stat calculator.
 """
 
+from pokerena.engine.rules import Gen1Rules, Gen3Rules
 from pokerena.engine.stats import compute_stats, initialize_battle_state, random_ivs
 from pokerena.models import Move, Pokemon
 
@@ -127,8 +128,8 @@ class TestComputeStats:
     def test_gen1_formula_differs_from_gen3(self):
         """Gen 1 stat formula should produce different values from the Gen 3 formula."""
         p = _simple_pokemon()
-        gen3 = compute_stats(p, level=100, gen1_mode=False)
-        gen1 = compute_stats(p, level=100, gen1_mode=True)
+        gen3 = compute_stats(p, level=100, rules=Gen3Rules())
+        gen1 = compute_stats(p, level=100, rules=Gen1Rules())
         # The two formulas produce different values
         assert gen3 != gen1
 
