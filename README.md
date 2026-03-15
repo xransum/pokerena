@@ -4,159 +4,296 @@ A Pokemon battle tournament simulator. Runs millions of simulated battles to
 determine the statistically strongest Pokemon at every competitive tier, then
 compares results against Smogon's 25 years of community tier placements.
 
----
-
 ## What it does
 
+- Fetches real Pokemon stats and moves from [PokeAPI](https://pokeapi.co) and
+  tier assignments from [Pokemon Showdown](https://github.com/smogon/pokemon-showdown)
 - Runs full round-robin tournaments within each Smogon tier (Ubers, OU, UU, RU, NU, PU)
 - Runs adjacent-tier playoffs (PU champion vs NU champion, NU vs RU, etc.)
 - Runs a grand final among all playoff winners
-- Produces a Smogon delta report showing where the simulation agrees or disagrees with official tier placements
+- Produces a Smogon delta report showing where simulation agrees or disagrees with official tier placements
 - Tracks evolutionary line performance across tiers
 - Supports all 9 generations with generation-accurate mechanics
 
----
+## Installation
 
-## Setup
+Requires Python 3.11+.
 
 ```
 pip install -e .
 ```
 
-Or without installing:
-
-```
-pip install requests tqdm
-```
-
----
+This registers the `pokerena` command. Alternatively, `simulate.py` at the
+project root is a thin shim that calls the same entry point without installing.
 
 ## Usage
 
+### Run a tournament
+
 ```bash
-# Gen 1 only, 20 battles/matchup, max IVs (default)
-python simulate.py
+# Gen 1, 20 battles per matchup (default)
+pokerena
 
 # Specific generation
-python simulate.py --gen 2
+pokerena --gen 2
 
-# All available generations sequentially
-python simulate.py --all-gens
+# All generations 1-9 sequentially
+pokerena --all-gens
 
 # More battles for higher statistical accuracy
-python simulate.py --battles 100
+pokerena --battles 100
 
-# Random IVs (0-15 per stat)
-python simulate.py --rand-ivs
+# Random IVs (0-15 per stat) instead of max (31)
+pokerena --rand-ivs
 
-# Random IVs, reproducible
-python simulate.py --rand-ivs --seed 42
+# Random IVs, reproducible across runs
+pokerena --rand-ivs --seed 42
 
-# Force re-fetch data from PokeAPI and Smogon
-python simulate.py --fetch
+# Force re-fetch all data from PokeAPI and Smogon (clears cache)
+pokerena --fetch
 
-# Show top N in console leaderboards
-python simulate.py --top 20
+# Show top 20 in console leaderboards (default: 10)
+pokerena --top 20
 
-# Control CPU workers
-python simulate.py --workers 8
+# Control CPU workers for parallel battle processing
+pokerena --workers 8
 
-# Use Gen 1 stat formula
-python simulate.py --gen1-mode
+# Use Gen 1 stat formula instead of Gen 6
+pokerena --gen1-mode
 
-# Debug logging
-python simulate.py --verbose
+# Debug logging to stderr
+pokerena --verbose
 ```
 
----
+### One-off battle
+
+Pit any two Pokemon against each other directly:
+
+```bash
+# Named battle
+pokerena battle pikachu mewtwo
+
+# Random matchup from the Gen 1 roster
+pokerena battle --random
+
+# Random matchup from Gen 3
+pokerena battle --random --gen 3
+
+# All standard flags also apply
+pokerena battle pikachu mewtwo --rand-ivs --seed 7 --gen1-mode
+```
+
+Output includes the winner, turns taken, HP remaining, and a type advantage flag.
+
+### Search and filter Pokemon
+
+Browse the full roster with optional filters:
+
+```bash
+# Show all Gen 1 Pokemon
+pokerena search --gen 1
+
+# Substring name match
+pokerena search char
+
+# Filter by type, tier, and BST range
+pokerena search --type fire --tier ou --min-bst 500
+
+# Sort by BST descending, limit to top 10
+pokerena search --sort bst --desc --limit 10
+
+# All filters combined
+pokerena search --gen 2 --type water --tier uu --min-bst 400 --max-bst 600 --sort bst --desc
+```
+
+Output is a table with columns: Name, Gen, Types, Tier, BST, HP, Atk, Def, SpA, SpD, Spe.
+
+Available `--sort` fields: `name`, `bst`, `tier`, `gen`, `hp`, `attack`, `defense`,
+`sp_atk`, `sp_def`, `speed`.
+
+### Manage the cache
+
+```bash
+# Show cache location and per-namespace file counts
+pokerena cache info
+
+# Clear everything
+pokerena cache clear
+
+# Clear only Smogon tier data (keeps PokeAPI data)
+pokerena cache clear smogon
+
+# Clear only PokeAPI data
+pokerena cache clear pokeapi
+```
 
 ## Output
 
-Results are written to `results/gen{N}/` after each run:
+Results are written to `results/gen{N}/` after each tournament run:
 
 | File | Contents |
 |------|----------|
-| `tier_{name}_leaderboard.csv` | Full ranked leaderboard for each tier |
-| `playoff_{lower}_{upper}.csv` | Playoff result between adjacent tier champions |
-| `grand_final_leaderboard.csv` | Grand final rankings |
-| `grand_final_matrix.csv` | Head-to-head win rate matrix |
-| `smogon_delta.csv` | Where simulation ranking diverges from Smogon placement |
+| `tier_{name}_leaderboard.csv` | Full ranked leaderboard for each Smogon tier |
+| `playoff_{lower}_{upper}.csv` | Result of each adjacent-tier playoff |
+| `grand_final_leaderboard.csv` | Final rankings with source tier and Smogon tier |
+| `grand_final_matrix.csv` | Head-to-head win-rate matrix for all finalists |
+| `smogon_delta.csv` | Per-Pokemon sim rank vs Smogon placement (UNDERRATED / OVERRATED / CONFIRMED) |
 | `evo_line_report.csv` | Evolutionary line performance across tiers |
 | `upsets.csv` | Playoffs where the lower-tier champion won |
 | `summary.csv` | One-line summary per phase |
 
----
-
 ## How it works
 
-### Data
+### Data pipeline
 
-Pokemon stats and moves are fetched from [PokeAPI](https://pokeapi.co) and
-cached locally under `cache/pokeapi/`. Smogon tier assignments are fetched
-from the [smogon/data](https://github.com/smogon/data) repository and cached
-under `cache/smogon/`. The network is never hit during simulation.
+Pokemon stats, moves, types, and evolution lines are fetched from
+[PokeAPI](https://pokeapi.co). Smogon tier assignments are parsed directly from
+Pokemon Showdown's `formats-data.ts` source files on GitHub. All responses are
+cached locally so the network is never hit during simulation once the cache is warm.
+
+Cache is stored at `~/.cache/pokerena/` on Linux/macOS and
+`%LOCALAPPDATA%\pokerena\Cache\` on Windows (via `platformdirs`), in two
+namespaces:
+
+```
+~/.cache/pokerena/
+  pokeapi/    -- one JSON file per Pokemon, move, species, and evolution chain
+  smogon/     -- one JSON file per generation tier map
+```
+
+Cold-cache fetching is parallelized with 20 concurrent threads
+(`ThreadPoolExecutor`). Requests to PokeAPI are retried up to 3 times on
+transient failures (HTTP 429, 5xx, network errors) using a linear ramp with
+random jitter:
+
+| Retry | Base wait | + jitter | Approx range |
+|-------|-----------|----------|--------------|
+| 1 | 250 ms | 0-100 ms | 250-350 ms |
+| 2 | 500 ms | 0-100 ms | 500-600 ms |
+| 3 | 750 ms | 0-100 ms | 750-850 ms |
+
+### Moveset selection
+
+For each Pokemon, up to 30 learnable moves are fetched and scored. The final
+moveset of 4 is chosen as:
+
+- 3 highest-scoring damaging moves (scored by `power x STAB x accuracy`)
+- 1 best status move (by accuracy), or a 4th damaging move if none exist
+- Struggle as a guaranteed fallback if no moves load successfully
 
 ### Battle mechanics
 
-- Level 100, 1v1, capped at 60 turns
-- Gen 6 damage formula (default), switchable to Gen 1 with `--gen1-mode`
-- Full 18-type Gen 6 type chart including immunities
-- STAB, critical hits (1/24 chance, 1.5x), accuracy rolls
-- All status conditions: burn, paralysis, poison, sleep, freeze
-- Stat stage tracking (+/- 6 stages)
-- Strategic AI: uses status moves 25% of the time when available, otherwise
-  picks highest-scoring damaging move with small random noise
+Every battle is a Level 100, 1v1 simulation capped at 60 turns.
+
+**Damage formula (Gen 6, default):**
+```
+floor((((2*L/5 + 2) * Power * Atk/Def) / 50 + 2) * STAB * TypeMult * CritMult * Rand)
+```
+
+- STAB: 1.5x when move type matches attacker type
+- Type multiplier: full 18-type Gen 6 chart including immunities (0x, 0.25x, 0.5x, 1x, 2x, 4x)
+- Critical hit: 1.5x at 1/24 chance (Gen 6 base rate)
+- Random factor: +/- 5%
+- Burn halves physical attack damage
+- Minimum 1 damage on non-immune hits
+
+**Status conditions:** burn (1/16 max HP per turn), poison (1/8 per turn),
+paralysis (25% skip chance, halved speed), sleep (random 1-3 turn duration),
+freeze (20% thaw chance per turn).
+
+**Type immunities on status:** Fire cannot be burned, Poison/Steel cannot be
+poisoned, Electric cannot be paralyzed, Ice cannot be frozen.
+
+**Strategic AI:** chooses a status move 25% of the time when the defender has
+no active status condition; otherwise picks the highest-scoring damaging move
+with 5% random noise.
+
+**Gen 1 mode (`--gen1-mode`):** uses the Gen 1 stat formula
+(`floor(((Base + IV) * 2 * Level) / 100) + 5`) instead of the Gen 3+ formula.
+
+**Timeout:** if 60 turns expire with neither Pokemon fainted, the winner is
+determined by highest HP percentage remaining.
 
 ### Tournament structure
 
-**Phase 1** -- full round robin within each Smogon tier, 20 battles per matchup
-by default. Ties broken by a 50-battle tiebreaker.
+**Phase 1 -- Tier round robins**
 
-**Phase 2** -- adjacent tier playoffs. Each tier champion faces the champion
-one tier up. 50 battles per playoff.
+Full round robin within each Smogon tier (Ubers, OU, UU, RU, NU, PU), 20
+battles per matchup by default. All matchups are distributed across CPU workers
+via `ProcessPoolExecutor`. Ties at the top are broken by a 50-battle tiebreaker.
 
-**Phase 3** -- grand final. All five playoff winners in a full round robin,
-100 battles per matchup.
+**Phase 2 -- Adjacent-tier playoffs**
 
----
+Each tier champion faces the champion one tier above: PU vs NU, NU vs RU,
+RU vs UU, UU vs OU, OU vs Ubers. 50 battles per playoff. An upset is flagged
+when the lower-tier champion wins.
 
-## Compute estimates (20 battles/matchup, i9 20 cores)
+**Phase 3 -- Grand final**
 
-| Scope | Pokemon | Total battles | Time |
-|-------|---------|--------------|------|
+All five playoff winners enter a full round robin, 100 battles per matchup,
+parallelized across CPU workers. The Pokemon with the highest win rate among
+finalists is the overall generation champion.
+
+## Performance
+
+Estimates at 20 battles per matchup on an i9 with 20 cores:
+
+| Scope | Pokemon | Total battles | Approx time |
+|-------|---------|---------------|-------------|
 | Gen 1 | 151 | ~226K | ~15 sec |
 | Gen 1-2 | 251 | ~630K | ~45 sec |
 | Gen 1-3 | 386 | ~1.5M | ~2 min |
 | All gens | 1,025 | ~10.5M | ~10-15 min |
 
----
+Cold-cache data loading adds roughly 1-3 minutes for Gen 1 (151 Pokemon x ~33
+API requests each) at 20 concurrent threads. Subsequent runs use the disk cache
+and add negligible overhead.
 
 ## Project structure
 
 ```
 pokerena/
+  cli.py              -- argument parsing and command dispatch
+  models.py           -- shared data models (Pokemon, Move, tier constants)
   data/
-    cache.py        -- local disk cache (JSON)
-    pokeapi.py      -- PokeAPI client
-    smogon.py       -- Smogon tier loader
-    loader.py       -- assembles Pokemon model instances
+    cache.py          -- namespaced JSON disk cache (platformdirs)
+    pokeapi.py        -- PokeAPI HTTP client with retry and caching
+    smogon.py         -- Pokemon Showdown tier data parser
+    loader.py         -- assembles Pokemon instances (concurrent fetching)
   engine/
-    stats.py        -- stat formula, IV handling
-    types.py        -- Gen 6 type chart
-    battle.py       -- single battle simulation
+    stats.py          -- Gen 1 and Gen 3+ stat formulas, IV generation
+    types.py          -- Gen 6 18-type chart
+    battle.py         -- single 1v1 battle simulation
   tournament/
-    runner.py       -- round robins, playoffs, grand final
+    runner.py         -- round robins, playoffs, grand final
   report/
-    writers.py      -- CSV output
-    console.py      -- terminal output
-  models.py         -- shared data models (Pokemon, Move)
-  cli.py            -- argument parsing and orchestration
-simulate.py         -- convenience entry point
-cache/              -- cached API responses (gitignored)
-results/            -- output CSVs (gitignored)
+    writers.py        -- CSV output
+    console.py        -- terminal output
+simulate.py           -- convenience entry point (no install required)
+results/              -- output CSVs per generation (gitignored)
 ```
 
----
+## Development
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+# or with uv
+uv sync
+
+# Run tests
+uv run pytest
+
+# Lint and format check
+uv run nox -p 3.11 -s pre-commit
+
+# Fast test feedback (no coverage)
+uv run nox -p 3.11 -s tests
+```
+
+Coverage is enforced at 80% minimum. `cli.py`, `loader.py`, `pokeapi.py`,
+`console.py`, `writers.py`, and `runner.py` are excluded from the coverage
+requirement as integration/IO modules.
 
 ## License
 
