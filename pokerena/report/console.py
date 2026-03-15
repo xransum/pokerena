@@ -14,10 +14,12 @@ _WIDTH = 62
 
 
 def _line(char: str = "=") -> str:
+    """Return a full-width horizontal rule using the given character."""
     return char * _WIDTH
 
 
 def _center(text: str) -> str:
+    """Center text within the standard console width."""
     return text.center(_WIDTH)
 
 
@@ -28,6 +30,7 @@ def print_header(
     total_battles: int,
     workers: int,
 ) -> None:
+    """Print the top-level tournament header with run statistics."""
     print()
     print(_line())
     print(_center(f"POKERENA -- GEN {gen} TOURNAMENT"))
@@ -41,10 +44,12 @@ def print_header(
 
 
 def print_phase1_header() -> None:
+    """Print the Phase 1 section header."""
     print("Phase 1 -- Tier Tournaments")
 
 
 def print_tier_result(tier: str, champion: str, win_rate: float, participants: int) -> None:
+    """Print a single tier champion result line."""
     label = TIER_LABELS.get(tier, tier.upper())
     print(
         f"  + {label:<8} -> Champion: {champion:<18} ({win_rate * 100:.1f}% win rate, {participants} Pokemon)"
@@ -52,11 +57,13 @@ def print_tier_result(tier: str, champion: str, win_rate: float, participants: i
 
 
 def print_phase2_header() -> None:
+    """Print the Phase 2 section header."""
     print()
     print("Phase 2 -- Adjacent Tier Playoffs")
 
 
 def print_playoff_result(pr: PlayoffResult) -> None:
+    """Print a single playoff matchup result line."""
     upset_flag = "  <- UPSET" if pr.upset else ""
     lower_label = TIER_LABELS.get(pr.lower_tier, pr.lower_tier.upper())
     upper_label = TIER_LABELS.get(pr.upper_tier, pr.upper_tier.upper())
@@ -78,12 +85,14 @@ def print_playoff_result(pr: PlayoffResult) -> None:
 
 
 def print_phase3_header(n_battles: int) -> None:
+    """Print the Phase 3 grand final section header."""
     print()
     print(f"Phase 3 -- Grand Final ({n_battles} battles/matchup)")
     print("  ...")
 
 
 def print_grand_final(gf: GrandFinalResult, top: int = 10) -> None:
+    """Print the grand final leaderboard with Smogon tier comparison verdicts."""
     print()
     print(_line())
     print(_center(f"GRAND FINAL RESULTS -- GEN {gf.gen}"))
@@ -114,6 +123,7 @@ def print_grand_final(gf: GrandFinalResult, top: int = 10) -> None:
 
 
 def _tier_index(tier: str) -> int:
+    """Return the numeric position of a tier in TIER_ORDER, or -1 if unknown."""
     try:
         return TIER_ORDER.index(tier)
     except ValueError:

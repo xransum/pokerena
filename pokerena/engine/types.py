@@ -188,6 +188,7 @@ class TypeChart:
         return result
 
     def is_immune(self, attacking_type: str, defender_types: list[str]) -> bool:
+        """Return True if the attacking type deals zero damage to the defender types."""
         return self.multiplier(attacking_type, defender_types) == 0.0
 
 

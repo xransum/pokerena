@@ -95,6 +95,7 @@ def _select_moveset(move_names: list[str], user_types: list[str]) -> list[Move]:
 
     # Score damaging moves (without type chart -- just STAB + power + accuracy)
     def _score(m: Move) -> float:
+        """Score a move by power, STAB, and accuracy without a type chart."""
         stab = 1.5 if m.type_ in user_types else 1.0
         acc = (m.accuracy / 100.0) if m.accuracy > 0 else 1.0
         return m.power * stab * acc

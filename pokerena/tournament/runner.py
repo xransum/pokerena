@@ -37,10 +37,12 @@ class MatchupRecord:
 
     @property
     def win_rate_a(self) -> float:
+        """Win rate of pokemon_a across all recorded battles."""
         return self.wins_a / self.battles if self.battles else 0.0
 
     @property
     def win_rate_b(self) -> float:
+        """Win rate of pokemon_b across all recorded battles."""
         return self.wins_b / self.battles if self.battles else 0.0
 
 
@@ -57,6 +59,8 @@ class TierLeaderboard:
 
 @dataclass
 class LeaderboardEntry:
+    """Single row in a tier leaderboard, ranked by win rate."""
+
     rank: int
     name: str
     wins: int
@@ -71,6 +75,8 @@ class LeaderboardEntry:
 
 @dataclass
 class PlayoffResult:
+    """Outcome of a Phase 2 adjacent-tier playoff."""
+
     lower_tier: str
     upper_tier: str
     lower_champion: str
@@ -82,15 +88,19 @@ class PlayoffResult:
 
     @property
     def winner(self) -> str:
+        """Return the name of the winning champion."""
         return self.lower_champion if self.lower_wins > self.upper_wins else self.upper_champion
 
     @property
     def lower_win_rate(self) -> float:
+        """Win rate of the lower-tier champion in this playoff."""
         return self.lower_wins / self.battles if self.battles else 0.0
 
 
 @dataclass
 class GrandFinalResult:
+    """Results of the Phase 3 grand final round robin."""
+
     gen: int
     entries: list[GrandFinalEntry] = field(default_factory=list)
     champion: str | None = None
@@ -99,6 +109,8 @@ class GrandFinalResult:
 
 @dataclass
 class GrandFinalEntry:
+    """Single ranked entry in the grand final leaderboard."""
+
     rank: int
     name: str
     win_rate: float
@@ -118,9 +130,11 @@ def _run_matchup_worker(args: tuple) -> MatchupRecord:
     from pokerena.models import Move, Pokemon
 
     def _rebuild_move(d: dict) -> Move:
+        """Reconstruct a Move instance from a plain dict."""
         return Move(**d)
 
     def _rebuild_pokemon(d: dict) -> Pokemon:
+        """Reconstruct a Pokemon instance from a plain dict, rebuilding its moves."""
         moves = [_rebuild_move(m) for m in d.pop("moves")]
         p = Pokemon(moves=moves, **d)
         return p

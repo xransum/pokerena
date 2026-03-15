@@ -22,6 +22,7 @@ from pokerena.tournament.runner import run_full_tournament
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build and return the CLI argument parser."""
     p = argparse.ArgumentParser(
         prog="pokerena",
         description="Pokemon battle tournament simulator.",
@@ -95,6 +96,7 @@ def _run_gen(
     args: argparse.Namespace,
     workers: int,
 ) -> None:
+    """Load Pokemon, run the full tournament for one generation, and write outputs."""
     # Load Pokemon
     pokemon = load_all(gen, force_fetch=args.fetch)
     if not pokemon:
@@ -164,6 +166,7 @@ def _run_gen(
 
 
 def main() -> None:
+    """Parse CLI arguments and run the simulator."""
     parser = _build_parser()
     args = parser.parse_args()
 

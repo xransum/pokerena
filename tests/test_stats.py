@@ -7,6 +7,7 @@ from pokerena.models import Move, Pokemon
 
 
 def _simple_pokemon(**overrides):
+    """Build a minimal Pokemon fixture with sensible defaults, accepting keyword overrides."""
     base = {
         "name": "testmon",
         "types": ["normal"],
@@ -28,7 +29,10 @@ def _simple_pokemon(**overrides):
 
 
 class TestComputeStats:
+    """Tests for the compute_stats function."""
+
     def test_hp_higher_than_other_stats_for_bulky(self):
+        """A Pokemon with very high base HP should have HP exceed its defensive stats."""
         # Chansey: 250 base HP
         chansey = _simple_pokemon(
             name="chansey",
@@ -47,6 +51,7 @@ class TestComputeStats:
         assert stats["hp"] > stats["sp_def"]
 
     def test_max_ivs_produce_higher_stats_than_zero_ivs(self):
+        """Max IVs (31) should produce strictly higher stats than zero IVs across every stat."""
         p = _simple_pokemon()
         max_stats = compute_stats(p, level=100, ivs=dict.fromkeys(p.base_stats, 31))
         zero_stats = compute_stats(p, level=100, ivs=dict.fromkeys(p.base_stats, 0))
@@ -54,6 +59,7 @@ class TestComputeStats:
             assert max_stats[stat] > zero_stats[stat]
 
     def test_higher_base_stat_produces_higher_final_stat(self):
+        """A Pokemon with higher base stats should have higher final stats than one with lower base stats."""
         low = _simple_pokemon(
             base_stats={
                 "hp": 45,
@@ -82,6 +88,7 @@ class TestComputeStats:
             assert high_stats[stat] > low_stats[stat]
 
     def test_hp_formula_gen3(self):
+        """HP stat should match the Gen 3 formula: floor((2*base + iv) * level / 100) + level + 10."""
         # HP = floor((2 * base + iv) * level / 100) + level + 10
         # base=45, iv=31, level=100 => floor((90+31)*100/100) + 100 + 10 = 121+110 = 231... wait
         # => floor(121) + 110 = 231
@@ -101,6 +108,7 @@ class TestComputeStats:
         assert stats["hp"] == expected_hp
 
     def test_non_hp_formula_gen3(self):
+        """Non-HP stats should match the Gen 3 formula: floor((2*base + iv) * level / 100) + 5."""
         p = _simple_pokemon(
             base_stats={
                 "hp": 45,
@@ -117,6 +125,7 @@ class TestComputeStats:
         assert stats["attack"] == expected_atk
 
     def test_gen1_formula_differs_from_gen3(self):
+        """Gen 1 stat formula should produce different values from the Gen 3 formula."""
         p = _simple_pokemon()
         gen3 = compute_stats(p, level=100, gen1_mode=False)
         gen1 = compute_stats(p, level=100, gen1_mode=True)
@@ -124,6 +133,7 @@ class TestComputeStats:
         assert gen3 != gen1
 
     def test_stat_minimum_is_one(self):
+        """Every computed stat should be at least 1, even with base 1 and zero IVs at level 1."""
         p = _simple_pokemon(
             base_stats={"hp": 1, "attack": 1, "defense": 1, "sp_atk": 1, "sp_def": 1, "speed": 1},
             bst=6,
@@ -133,6 +143,7 @@ class TestComputeStats:
             assert val >= 1
 
     def test_level_scales_stats(self):
+        """Stats computed at level 100 should be strictly higher than at level 50."""
         p = _simple_pokemon()
         lv50 = compute_stats(p, level=50)
         lv100 = compute_stats(p, level=100)
@@ -141,7 +152,10 @@ class TestComputeStats:
 
 
 class TestRandomIvs:
+    """Tests for the random_ivs function."""
+
     def test_returns_all_stats(self):
+        """random_ivs should return a dict with keys for all six stats."""
         import random
 
         ivs = random_ivs(random.Random(0))
@@ -149,6 +163,7 @@ class TestRandomIvs:
         assert set(ivs.keys()) == expected
 
     def test_values_in_range(self):
+        """All IV values should fall within [0, max_iv]."""
         import random
 
         rng = random.Random(0)
@@ -158,6 +173,7 @@ class TestRandomIvs:
                 assert 0 <= v <= 15
 
     def test_seeded_is_reproducible(self):
+        """Two calls with the same seed should return identical IVs."""
         import random
 
         ivs1 = random_ivs(random.Random(99))
@@ -166,31 +182,38 @@ class TestRandomIvs:
 
 
 class TestInitializeBattleState:
+    """Tests for the initialize_battle_state function."""
+
     def test_hp_set_to_max(self):
+        """The battler's current_hp should equal max_hp and be positive after initialization."""
         p = _simple_pokemon()
         battler = initialize_battle_state(p)
         assert battler.current_hp == battler.max_hp
         assert battler.max_hp > 0
 
     def test_status_cleared(self):
+        """Any pre-existing status on the source Pokemon should be cleared in the battler."""
         p = _simple_pokemon()
         p.status = "burn"
         battler = initialize_battle_state(p)
         assert battler.status is None
 
     def test_stat_stages_zeroed(self):
+        """All stat stages should be initialised to zero."""
         p = _simple_pokemon()
         battler = initialize_battle_state(p)
         for v in battler.stat_stages.values():
             assert v == 0
 
     def test_original_not_mutated(self):
+        """Calling initialize_battle_state should not modify the original Pokemon object."""
         p = _simple_pokemon()
         original_hp = p.current_hp
         initialize_battle_state(p)
         assert p.current_hp == original_hp
 
     def test_stats_dict_populated(self):
+        """The battler's stats dict should contain all stat keys with positive values."""
         p = _simple_pokemon()
         battler = initialize_battle_state(p)
         assert "attack" in battler.stats

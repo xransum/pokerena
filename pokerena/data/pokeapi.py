@@ -21,12 +21,14 @@ _RATE_DELAY = 0.05  # seconds between requests to be polite
 
 
 def _get(url: str) -> dict:
+    """Make a GET request and return the parsed JSON response."""
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
 
 def _fetch_cached(namespace: str, key: str, url: str) -> dict:
+    """Return cached data if present, otherwise fetch from URL, cache, and return."""
     cached = disk_cache.get(namespace, key)
     if cached is not None:
         return cached  # type: ignore[return-value]

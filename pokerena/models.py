@@ -28,6 +28,8 @@ TIER_LABELS = {
 
 @dataclass
 class Move:
+    """A single move a Pokemon can use in battle."""
+
     name: str
     type_: str  # e.g. "fire"
     category: str  # "physical", "special", "status"
@@ -53,6 +55,8 @@ class Move:
 
 @dataclass
 class Pokemon:
+    """A single Pokemon participant with stats, moves, and battle state."""
+
     name: str
     types: list[str]  # 1 or 2 type strings, lower-case
     base_stats: dict  # {"hp": int, "attack": int, ...}
@@ -72,12 +76,15 @@ class Pokemon:
     stat_stages: dict = field(default_factory=dict)  # {"attack": 0, ...}
 
     def __post_init__(self) -> None:
+        """Recompute BST from base_stats after dataclass init."""
         self.bst = sum(self.base_stats.values())
 
     def is_fainted(self) -> bool:
+        """Return True if this Pokemon has no HP remaining."""
         return self.current_hp <= 0
 
     def stage_multiplier(self, stat: str) -> float:
+        """Return the stat stage multiplier for the given stat name."""
         stage = self.stat_stages.get(stat, 0)
         if stage >= 0:
             return (2 + stage) / 2.0

@@ -11,6 +11,7 @@ from pokerena.models import Move, Pokemon
 
 @pytest.fixture
 def physical_move():
+    """A standard physical Normal-type move (Tackle)."""
     return Move(
         name="tackle",
         type_="normal",
@@ -23,6 +24,7 @@ def physical_move():
 
 @pytest.fixture
 def special_move():
+    """A standard special Fire-type move (Flamethrower)."""
     return Move(
         name="flamethrower",
         type_="fire",
@@ -35,6 +37,7 @@ def special_move():
 
 @pytest.fixture
 def status_move():
+    """A status Electric-type move that inflicts paralysis (Thunder Wave)."""
     return Move(
         name="thunder-wave",
         type_="electric",
@@ -60,6 +63,7 @@ def always_hits_move():
 
 
 def _make_mewtwo():
+    """Create a Mewtwo Pokemon instance with a standard Ubers moveset."""
     return Pokemon(
         name="mewtwo",
         types=["psychic"],
@@ -84,6 +88,7 @@ def _make_mewtwo():
 
 
 def _make_charizard():
+    """Create a Charizard Pokemon instance with a standard OU moveset."""
     return Pokemon(
         name="charizard",
         types=["fire", "flying"],
@@ -108,6 +113,7 @@ def _make_charizard():
 
 
 def _make_magikarp():
+    """Create a Magikarp Pokemon instance with minimal moves."""
     return Pokemon(
         name="magikarp",
         types=["water"],
@@ -156,24 +162,29 @@ def _make_steelix():
 
 @pytest.fixture
 def mewtwo():
+    """Mewtwo fixture for battle tests."""
     return _make_mewtwo()
 
 
 @pytest.fixture
 def charizard():
+    """Charizard fixture for battle tests."""
     return _make_charizard()
 
 
 @pytest.fixture
 def magikarp():
+    """Magikarp fixture for battle tests."""
     return _make_magikarp()
 
 
 @pytest.fixture
 def steelix():
+    """Steelix fixture for type immunity tests."""
     return _make_steelix()
 
 
 @pytest.fixture
 def seeded_rng():
+    """A seeded Random instance for reproducible tests."""
     return random.Random(42)

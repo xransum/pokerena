@@ -19,35 +19,44 @@ from pokerena.models import Move, Pokemon
 
 
 def _init(pokemon: Pokemon, **kwargs) -> Pokemon:
+    """Initialize battle state for a Pokemon and return the copy."""
     return initialize_battle_state(pokemon, **kwargs)
 
 
 class TestRunBattle:
+    """Tests for the top-level run_battle function."""
+
     def test_returns_battle_result(self, mewtwo, charizard, seeded_rng):
+        """run_battle should return a BattleResult instance."""
         result = run_battle(mewtwo, charizard, rng=seeded_rng)
         assert isinstance(result, BattleResult)
 
     def test_winner_is_one_of_the_two(self, mewtwo, charizard, seeded_rng):
+        """Winner and loser should be the two combatants and must differ."""
         result = run_battle(mewtwo, charizard, rng=seeded_rng)
         assert result.winner in {mewtwo.name, charizard.name}
         assert result.loser in {mewtwo.name, charizard.name}
         assert result.winner != result.loser
 
     def test_turns_positive(self, mewtwo, charizard, seeded_rng):
+        """A battle should last at least one turn."""
         result = run_battle(mewtwo, charizard, rng=seeded_rng)
         assert result.turns >= 1
 
     def test_turns_capped_at_60(self, magikarp_splash, magikarp_b, seeded_rng):
+        """Two Splash-only Magikarp should time out at exactly 60 turns."""
         # Two Magikarp with only Splash (status, no damage) should time out
         result = run_battle(magikarp_splash, magikarp_b, rng=seeded_rng)
         assert result.turns == 60
         assert result.timeout is True
 
     def test_winner_hp_pct_between_0_and_1(self, mewtwo, charizard, seeded_rng):
+        """Winner HP percentage should be in the range (0, 1]."""
         result = run_battle(mewtwo, charizard, rng=seeded_rng)
         assert 0.0 < result.winner_hp_pct <= 1.0
 
     def test_stronger_wins_majority(self, mewtwo, charizard):
+        """Mewtwo (Ubers) should win the majority of battles against Charizard (OU)."""
         # Mewtwo (680 BST Ubers) should beat Charizard (534 BST OU) consistently
         wins = 0
         for i in range(30):
@@ -57,17 +66,20 @@ class TestRunBattle:
         assert wins >= 20, f"Mewtwo only won {wins}/30 -- expected dominance"
 
     def test_reproducible_with_same_seed(self, mewtwo, charizard):
+        """The same seed should always produce the same battle outcome."""
         r1 = run_battle(mewtwo, charizard, rng=random.Random(42))
         r2 = run_battle(mewtwo, charizard, rng=random.Random(42))
         assert r1.winner == r2.winner
         assert r1.turns == r2.turns
 
     def test_different_seeds_may_differ(self, mewtwo, charizard):
+        """Different seeds should generally produce different turn counts."""
         results = {run_battle(mewtwo, charizard, rng=random.Random(i)).turns for i in range(20)}
         # Not all battles should have identical turn counts
         assert len(results) > 1
 
     def test_rand_ivs_produces_variation(self, mewtwo, charizard):
+        """Random IVs should produce variation in turn counts across battles."""
         results = set()
         for i in range(10):
             r = run_battle(mewtwo, charizard, rand_ivs=True, rng=random.Random(i))
@@ -75,6 +87,7 @@ class TestRunBattle:
         assert len(results) > 1
 
     def test_original_pokemon_not_mutated(self, mewtwo, charizard):
+        """run_battle must not mutate the original Pokemon instances."""
         original_hp = mewtwo.current_hp
         original_status = mewtwo.status
         run_battle(mewtwo, charizard, rng=random.Random(1))
@@ -129,20 +142,24 @@ def magikarp_b():
 
 
 class TestApplyStatus:
+    """Tests for the _apply_status helper."""
+
     def test_apply_burn(self, charizard, seeded_rng):
+        """Fire-type Pokemon should be immune to burn."""
         battler = _init(charizard)
-        # Charizard is Fire type -- should be immune to burn
         result = _apply_status(battler, "burn", seeded_rng)
         assert result is False
         assert battler.status is None
 
     def test_apply_paralysis_to_non_electric(self, charizard, seeded_rng):
+        """Paralysis should apply successfully to a non-Electric Pokemon."""
         battler = _init(charizard)
         result = _apply_status(battler, "paralysis", seeded_rng)
         assert result is True
         assert battler.status == "paralysis"
 
     def test_electric_immune_to_paralysis(self, seeded_rng):
+        """Electric-type Pokemon should be immune to paralysis."""
         jolteon = Pokemon(
             name="jolteon",
             types=["electric"],
@@ -164,6 +181,7 @@ class TestApplyStatus:
         assert result is False
 
     def test_cannot_stack_status(self, mewtwo, seeded_rng):
+        """A second status should not overwrite an existing one."""
         battler = _init(mewtwo)
         _apply_status(battler, "paralysis", seeded_rng)
         result = _apply_status(battler, "burn", seeded_rng)
@@ -171,24 +189,30 @@ class TestApplyStatus:
         assert battler.status == "paralysis"
 
     def test_sleep_sets_counter(self, mewtwo, seeded_rng):
+        """Applying sleep should set a positive status_counter (1-3 turns)."""
         battler = _init(mewtwo)
         _apply_status(battler, "sleep", seeded_rng)
         assert battler.status == "sleep"
         assert 1 <= battler.status_counter <= 3
 
     def test_poison_immune_steel(self, steelix, seeded_rng):
+        """Steel-type Pokemon should be immune to poison."""
         battler = _init(steelix)
         result = _apply_status(battler, "poison", seeded_rng)
         assert result is False
 
 
 class TestCheckStatusSkip:
+    """Tests for the _check_status_skip helper."""
+
     def test_no_status_never_skips(self, mewtwo, seeded_rng):
+        """A Pokemon with no status should never be forced to skip."""
         battler = _init(mewtwo)
         # Run many times -- should never skip
         assert all(_check_status_skip(battler, random.Random(i)) is False for i in range(50))
 
     def test_sleep_skips_until_counter_zero(self, mewtwo):
+        """Sleeping Pokemon should skip turns until the counter reaches zero then wake."""
         battler = _init(mewtwo)
         battler.status = "sleep"
         battler.status_counter = 2
@@ -203,6 +227,7 @@ class TestCheckStatusSkip:
         assert battler.status is None
 
     def test_freeze_thaws_eventually(self, mewtwo):
+        """A frozen Pokemon should thaw within a reasonable number of turns."""
         battler = _init(mewtwo)
         battler.status = "freeze"
         # With 20% thaw chance, should thaw within reasonable attempts
@@ -214,6 +239,7 @@ class TestCheckStatusSkip:
         assert thawed
 
     def test_freeze_can_skip(self, mewtwo):
+        """_check_status_skip on a frozen Pokemon should return a bool without raising."""
         # Use a deterministic RNG that doesn't thaw (rng.random() >= 0.20)
         battler = _init(mewtwo)
         battler.status = "freeze"
@@ -224,6 +250,8 @@ class TestCheckStatusSkip:
 
 
 class TestCalcDamage:
+    """Tests for the _calc_damage helper."""
+
     def test_immune_returns_zero(self, seeded_rng):
         # Normal move vs Ghost type -- should return 0 (immune)
         attacker = initialize_battle_state(
@@ -315,6 +343,7 @@ class TestCalcDamage:
         assert stab_dmg > non_stab_dmg
 
     def test_burn_halves_physical_damage(self):
+        """A burned attacker should deal roughly half physical damage."""
         attacker = initialize_battle_state(
             Pokemon(
                 name="attacker",
@@ -364,6 +393,7 @@ class TestCalcDamage:
         assert burned_dmg <= normal_dmg * 0.6
 
     def test_miss_returns_zero(self):
+        """A near-zero-accuracy move should miss (return 0 damage) most of the time."""
         attacker = initialize_battle_state(
             Pokemon(
                 name="attacker",
@@ -412,7 +442,10 @@ class TestCalcDamage:
 
 
 class TestEndOfTurnStatus:
+    """Tests for the _end_of_turn_status helper."""
+
     def test_burn_deals_damage(self, mewtwo):
+        """Burn should reduce HP at end of turn."""
         battler = _init(mewtwo)
         battler.status = "burn"
         hp_before = battler.current_hp
@@ -420,6 +453,7 @@ class TestEndOfTurnStatus:
         assert battler.current_hp < hp_before
 
     def test_poison_deals_damage(self, mewtwo):
+        """Poison should reduce HP at end of turn."""
         battler = _init(mewtwo)
         battler.status = "poison"
         hp_before = battler.current_hp
@@ -427,12 +461,14 @@ class TestEndOfTurnStatus:
         assert battler.current_hp < hp_before
 
     def test_no_status_no_damage(self, mewtwo):
+        """A Pokemon with no status should not lose HP at end of turn."""
         battler = _init(mewtwo)
         hp_before = battler.current_hp
         _end_of_turn_status(battler, random.Random(0))
         assert battler.current_hp == hp_before
 
     def test_paralysis_no_end_of_turn_damage(self, mewtwo):
+        """Paralysis should not cause end-of-turn HP damage."""
         battler = _init(mewtwo)
         battler.status = "paralysis"
         hp_before = battler.current_hp
@@ -440,6 +476,7 @@ class TestEndOfTurnStatus:
         assert battler.current_hp == hp_before
 
     def test_hp_never_goes_below_zero(self, magikarp):
+        """HP should be clamped to 0 and never go negative from status damage."""
         battler = _init(magikarp)
         battler.status = "poison"
         battler.current_hp = 1  # barely alive

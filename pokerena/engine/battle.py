@@ -29,6 +29,8 @@ RANDOM_NOISE = 0.05  # ±5% noise on damage
 
 @dataclass
 class BattleResult:
+    """Outcome of a single 1v1 battle."""
+
     winner: str  # Pokemon name
     loser: str
     turns: int
@@ -195,6 +197,7 @@ def _choose_move(
 
     # Score damaging moves with noise
     def _score(m: Move) -> float:
+        """Score a move using type-chart effectiveness plus random noise."""
         base = m.score(attacker.types, defender.types, TYPE_CHART)
         return base * (1.0 + rng.uniform(-RANDOM_NOISE, RANDOM_NOISE))
 

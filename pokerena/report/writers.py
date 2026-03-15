@@ -24,12 +24,14 @@ _RESULTS_ROOT = _REPO_ROOT / "results"
 
 
 def _out_dir(gen: int) -> pathlib.Path:
+    """Return (and create if necessary) the output directory for a generation."""
     d = _RESULTS_ROOT / f"gen{gen}"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def _write_csv(path: pathlib.Path, rows: list[dict[str, Any]]) -> None:
+    """Write a list of dicts to a CSV file, using the first row's keys as headers."""
     if not rows:
         log.debug("No rows for %s -- skipping.", path.name)
         return
@@ -41,6 +43,7 @@ def _write_csv(path: pathlib.Path, rows: list[dict[str, Any]]) -> None:
 
 
 def write_tier_leaderboard(lb: TierLeaderboard) -> None:
+    """Write a tier leaderboard to CSV under results/gen{N}/."""
     out = _out_dir(lb.gen)
     path = out / f"tier_{lb.tier}_leaderboard.csv"
     rows = [
@@ -62,6 +65,7 @@ def write_tier_leaderboard(lb: TierLeaderboard) -> None:
 
 
 def write_playoffs(gen: int, playoffs: list[PlayoffResult]) -> None:
+    """Write one CSV per playoff matchup under results/gen{N}/."""
     out = _out_dir(gen)
     for pr in playoffs:
         fname = f"playoff_{pr.lower_tier}_{pr.upper_tier}.csv"
@@ -83,6 +87,7 @@ def write_playoffs(gen: int, playoffs: list[PlayoffResult]) -> None:
 
 
 def write_grand_final(gf: GrandFinalResult) -> None:
+    """Write the grand final leaderboard and win-rate matrix CSVs."""
     out = _out_dir(gf.gen)
 
     # Leaderboard
@@ -203,6 +208,7 @@ def write_evo_line_report(
 
 
 def write_upsets(gen: int, upsets: list[PlayoffResult]) -> None:
+    """Write a CSV of all playoff upsets (lower-tier champion wins) for a generation."""
     out = _out_dir(gen)
     rows = [
         {
@@ -219,6 +225,7 @@ def write_upsets(gen: int, upsets: list[PlayoffResult]) -> None:
 
 
 def write_summary(gen: int, results: dict) -> None:
+    """Write a high-level summary CSV covering all three tournament phases."""
     out = _out_dir(gen)
     rows = []
 

@@ -170,6 +170,7 @@ _GEN1_PU: set[str] = {
 
 
 def _normalize_name(name: str) -> str:
+    """Lowercase and hyphenate a Pokemon name for consistent key lookups."""
     return name.lower().replace(" ", "-")
 
 
@@ -245,6 +246,7 @@ def _normalize_tier(tier: str) -> str | None:
 
 
 def _build_gen1_fallback() -> dict[str, str]:
+    """Build the hand-curated Gen 1 tier map from the bundled fallback data."""
     tiers: dict[str, str] = {}
     tiers.update(_GEN1_FALLBACK)
     for name in _GEN1_PU:
