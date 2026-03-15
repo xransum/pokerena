@@ -35,6 +35,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: xransum/pokerena
+          files: coverage.xml
 
   docs:
     name: docs

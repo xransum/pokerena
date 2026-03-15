@@ -54,7 +54,7 @@ packages = ["pokerena"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=pokerena --cov-report=term-missing --cov-report=html:htmlcov"
+addopts = "--cov=pokerena --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml"
 
 [tool.coverage.run]
 source = ["pokerena"]
