@@ -11,7 +11,6 @@ Responsible for:
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from pokerena.data import pokeapi, smogon
 from pokerena.models import Move, Pokemon
@@ -35,7 +34,7 @@ _AILMENT_MAP = {
 _MAX_MOVE_FETCH = 30
 
 
-def _parse_move(raw: dict) -> Optional[Move]:
+def _parse_move(raw: dict) -> Move | None:
     """Parse a raw PokeAPI /move/{name} payload into a Move instance."""
     if raw is None:
         return None
@@ -91,9 +90,7 @@ def _select_moveset(move_names: list[str], user_types: list[str]) -> list[Move]:
         except Exception as exc:  # noqa: BLE001
             log.debug("Skipping move %s: %s", name, exc)
 
-    damaging = [
-        m for m in fetched if m.category in ("physical", "special") and m.power > 0
-    ]
+    damaging = [m for m in fetched if m.category in ("physical", "special") and m.power > 0]
     status = [m for m in fetched if m.category == "status"]
 
     # Score damaging moves (without type chart -- just STAB + power + accuracy)

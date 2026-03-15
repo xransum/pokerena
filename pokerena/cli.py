@@ -13,13 +13,12 @@ import logging
 import os
 import sys
 from collections import defaultdict
-from itertools import combinations
 
 from pokerena.data.loader import load_all
 from pokerena.models import TIER_ORDER
-from pokerena.tournament.runner import run_full_tournament
-from pokerena.report import writers
 from pokerena.report import console as con
+from pokerena.report import writers
+from pokerena.tournament.runner import run_full_tournament
 
 
 def _build_parser() -> argparse.ArgumentParser:

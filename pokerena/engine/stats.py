@@ -14,7 +14,6 @@ import random
 
 from pokerena.models import Pokemon
 
-
 # Default IVs (31 = max, "perfectly bred")
 MAX_IV = 31
 
@@ -39,15 +38,12 @@ def compute_stats(
     IVs default to MAX_IV (31) if not provided.
     """
     if ivs is None:
-        ivs = {stat: MAX_IV for stat in pokemon.base_stats}
+        ivs = dict.fromkeys(pokemon.base_stats, MAX_IV)
 
     stats: dict[str, int] = {}
     for stat_name, base in pokemon.base_stats.items():
         iv = ivs.get(stat_name, MAX_IV)
-        if gen1_mode:
-            value = ((base + iv) * 2 * level) // 100
-        else:
-            value = (2 * base + iv) * level // 100
+        value = ((base + iv) * 2 * level) // 100 if gen1_mode else (2 * base + iv) * level // 100
 
         if stat_name == "hp":
             value += level + 10
@@ -87,5 +83,5 @@ def initialize_battle_state(
     p.current_hp = p.max_hp
     p.status = None
     p.status_counter = 0
-    p.stat_stages = {s: 0 for s in ("attack", "defense", "sp_atk", "sp_def", "speed")}
+    p.stat_stages = dict.fromkeys(("attack", "defense", "sp_atk", "sp_def", "speed"), 0)
     return p

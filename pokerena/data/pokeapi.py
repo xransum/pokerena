@@ -7,9 +7,8 @@ Never hits the network during simulation if cache is warm.
 
 from __future__ import annotations
 
-import time
 import logging
-from typing import Any
+import time
 
 import requests
 
@@ -61,9 +60,7 @@ def fetch_pokemon(name: str) -> dict:
 
 def fetch_species(name: str) -> dict:
     """Return raw PokeAPI /pokemon-species/{name} payload, cached."""
-    return _fetch_cached(
-        "pokeapi", f"species_{name}", f"{_BASE}/pokemon-species/{name}"
-    )
+    return _fetch_cached("pokeapi", f"species_{name}", f"{_BASE}/pokemon-species/{name}")
 
 
 def fetch_move(name: str) -> dict:

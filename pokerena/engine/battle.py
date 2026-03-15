@@ -13,11 +13,11 @@ Implements:
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from pokerena.models import Move, Pokemon
 from pokerena.engine.stats import initialize_battle_state, random_ivs
 from pokerena.engine.types import TYPE_CHART
+from pokerena.models import Move, Pokemon
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -67,9 +67,8 @@ def _calc_damage(
                * STAB * TypeMultiplier * CritMultiplier * RandomFactor)
     """
     # Accuracy check
-    if move.accuracy > 0:
-        if rng.randint(1, 100) > move.accuracy:
-            return 0  # miss
+    if move.accuracy > 0 and rng.randint(1, 100) > move.accuracy:
+        return 0  # miss
 
     # Pick attack / defense stats based on move category
     if move.category == "physical":
@@ -170,11 +169,7 @@ def _check_status_skip(pokemon: Pokemon, rng: random.Random) -> bool:
             return False
         return True
 
-    if pokemon.status == "paralysis":
-        if rng.random() < 0.25:  # 25% full paralysis chance
-            return True
-
-    return False
+    return pokemon.status == "paralysis" and rng.random() < 0.25  # 25% full paralysis chance
 
 
 # ---------------------------------------------------------------------------
@@ -217,15 +212,12 @@ def _choose_move(
     """
     status_moves = [m for m in attacker.moves if m.category == "status"]
     damaging_moves = [
-        m
-        for m in attacker.moves
-        if m.category in ("physical", "special") and m.power > 0
+        m for m in attacker.moves if m.category in ("physical", "special") and m.power > 0
     ]
 
     # Status move attempt
-    if status_moves and defender.status is None:
-        if rng.random() < STATUS_MOVE_CHANCE:
-            return rng.choice(status_moves)
+    if status_moves and defender.status is None and rng.random() < STATUS_MOVE_CHANCE:
+        return rng.choice(status_moves)
 
     if not damaging_moves:
         return attacker.moves[0]

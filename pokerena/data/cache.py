@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import pathlib
 
-
 _REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 _CACHE_ROOT = _REPO_ROOT / "cache"
 

@@ -16,10 +16,9 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from itertools import combinations
-from typing import Optional
 
-from pokerena.models import Pokemon, TIER_ORDER
-from pokerena.engine.battle import run_battle, BattleResult
+from pokerena.engine.battle import BattleResult, run_battle
+from pokerena.models import TIER_ORDER, Pokemon
 
 log = logging.getLogger(__name__)
 
@@ -56,8 +55,8 @@ class TierLeaderboard:
 
     tier: str
     gen: int
-    entries: list["LeaderboardEntry"] = field(default_factory=list)
-    champion: Optional[str] = None
+    entries: list[LeaderboardEntry] = field(default_factory=list)
+    champion: str | None = None
     champion_win_rate: float = 0.0
 
 
@@ -88,11 +87,7 @@ class PlayoffResult:
 
     @property
     def winner(self) -> str:
-        return (
-            self.lower_champion
-            if self.lower_wins > self.upper_wins
-            else self.upper_champion
-        )
+        return self.lower_champion if self.lower_wins > self.upper_wins else self.upper_champion
 
     @property
     def lower_win_rate(self) -> float:
@@ -102,8 +97,8 @@ class PlayoffResult:
 @dataclass
 class GrandFinalResult:
     gen: int
-    entries: list["GrandFinalEntry"] = field(default_factory=list)
-    champion: Optional[str] = None
+    entries: list[GrandFinalEntry] = field(default_factory=list)
+    champion: str | None = None
     matchup_matrix: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
@@ -129,8 +124,8 @@ def _run_matchup_worker(args: tuple) -> MatchupRecord:
     a_dict, b_dict, n_battles, rand_ivs, seed, gen1_mode = args
 
     # Reconstruct Pokemon from dicts (avoids pickling full objects)
-    from pokerena.models import Pokemon, Move
     from pokerena.engine.battle import run_battle
+    from pokerena.models import Move, Pokemon
 
     def _rebuild_move(d: dict) -> Move:
         return Move(**d)
@@ -206,7 +201,7 @@ def run_tier_tournament(
     pokemon: list[Pokemon],
     n_battles: int = 20,
     rand_ivs: bool = False,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     workers: int = 4,
     gen1_mode: bool = False,
 ) -> tuple[TierLeaderboard, list[MatchupRecord]]:
@@ -327,7 +322,7 @@ def run_tiebreaker(
     b: Pokemon,
     n_battles: int = 50,
     rand_ivs: bool = False,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     gen1_mode: bool = False,
 ) -> str:
     """
@@ -357,7 +352,7 @@ def run_playoff(
     upper_champion: Pokemon,
     n_battles: int = 50,
     rand_ivs: bool = False,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     gen1_mode: bool = False,
 ) -> PlayoffResult:
     """
@@ -402,7 +397,7 @@ def run_grand_final(
     tier_leaderboards: dict[str, TierLeaderboard],
     n_battles: int = 100,
     rand_ivs: bool = False,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     workers: int = 4,
     gen1_mode: bool = False,
 ) -> GrandFinalResult:
@@ -485,7 +480,7 @@ def run_full_tournament(
     n_battles_phase2: int = 50,
     n_battles_phase3: int = 100,
     rand_ivs: bool = False,
-    seed: Optional[int] = None,
+    seed: int | None = None,
     workers: int = 4,
     gen1_mode: bool = False,
 ) -> dict:
@@ -504,9 +499,7 @@ def run_full_tournament(
 
     # --- Phase 1: Tier round robins ---
     champions: dict[str, Pokemon] = {}
-    poke_map = {
-        p.name: p for tier_pokes in pokemon_by_tier.values() for p in tier_pokes
-    }
+    poke_map = {p.name: p for tier_pokes in pokemon_by_tier.values() for p in tier_pokes}
 
     for tier in TIER_ORDER:
         pokes = pokemon_by_tier.get(tier, [])
@@ -558,13 +551,11 @@ def run_full_tournament(
 
     # --- Phase 2: Adjacent tier playoffs ---
     playoff_winners: list[tuple[Pokemon, str]] = []  # (pokemon, source_tier)
-    adjacent_pairs = list(zip(TIER_ORDER, TIER_ORDER[1:]))
+    adjacent_pairs = list(zip(TIER_ORDER, TIER_ORDER[1:], strict=False))
 
     for lower_tier, upper_tier in adjacent_pairs:
         if lower_tier not in champions or upper_tier not in champions:
-            log.info(
-                "Skipping playoff %s vs %s -- missing champion.", lower_tier, upper_tier
-            )
+            log.info("Skipping playoff %s vs %s -- missing champion.", lower_tier, upper_tier)
             continue
 
         pr = run_playoff(
@@ -596,9 +587,7 @@ def run_full_tournament(
             else upper_tier
         ]
         # Simpler: look up by name
-        winner_pokemon = champions.get(
-            lower_tier if pr.winner == pr.lower_champion else upper_tier
-        )
+        winner_pokemon = champions.get(lower_tier if pr.winner == pr.lower_champion else upper_tier)
         if winner_pokemon:
             source_tier = lower_tier if pr.winner == pr.lower_champion else upper_tier
             playoff_winners.append((winner_pokemon, source_tier))

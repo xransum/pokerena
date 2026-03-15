@@ -4,13 +4,10 @@ Console output formatter -- renders tournament results to the terminal.
 
 from __future__ import annotations
 
-import os
-
-from pokerena.models import TIER_ORDER, TIER_LABELS
+from pokerena.models import TIER_LABELS, TIER_ORDER
 from pokerena.tournament.runner import (
-    TierLeaderboard,
-    PlayoffResult,
     GrandFinalResult,
+    PlayoffResult,
 )
 
 _WIDTH = 62
@@ -47,9 +44,7 @@ def print_phase1_header() -> None:
     print("Phase 1 -- Tier Tournaments")
 
 
-def print_tier_result(
-    tier: str, champion: str, win_rate: float, participants: int
-) -> None:
+def print_tier_result(tier: str, champion: str, win_rate: float, participants: int) -> None:
     label = TIER_LABELS.get(tier, tier.upper())
     print(
         f"  + {label:<8} -> Champion: {champion:<18} ({win_rate * 100:.1f}% win rate, {participants} Pokemon)"

@@ -19,7 +19,6 @@ and the compiled community JSON datasets maintained at:
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from pokerena.data import cache as disk_cache
 from pokerena.models import TIERS
@@ -196,9 +195,7 @@ def load_tiers(gen: int, force_fetch: bool = False) -> dict[str, str]:
             raw = resp.json()
             tiers = _parse_smogon_data(raw)
             disk_cache.put("smogon", cache_key, tiers)
-            log.info(
-                "Smogon tier data fetched for Gen %d (%d entries)", gen, len(tiers)
-            )
+            log.info("Smogon tier data fetched for Gen %d (%d entries)", gen, len(tiers))
             return tiers
     except Exception as exc:  # noqa: BLE001
         log.warning("Could not fetch Smogon tier data for Gen %d: %s", gen, exc)
@@ -221,17 +218,14 @@ def _parse_smogon_data(raw: dict) -> dict[str, str]:
     """
     result: dict[str, str] = {}
     for name, entry in raw.items():
-        if isinstance(entry, dict):
-            tier = entry.get("tier", "").lower()
-        else:
-            tier = str(entry).lower()
+        tier = entry.get("tier", "").lower() if isinstance(entry, dict) else str(entry).lower()
         normalized_tier = _normalize_tier(tier)
         if normalized_tier:
             result[_normalize_name(name)] = normalized_tier
     return result
 
 
-def _normalize_tier(tier: str) -> Optional[str]:
+def _normalize_tier(tier: str) -> str | None:
     """Map raw Smogon tier strings to our internal tier keys."""
     mapping = {
         "uber": "ubers",

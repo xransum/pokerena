@@ -9,13 +9,12 @@ import logging
 import pathlib
 from typing import Any
 
-from pokerena.models import TIER_ORDER, TIER_LABELS
+from pokerena.models import TIER_ORDER
 from pokerena.tournament.runner import (
-    TierLeaderboard,
-    MatchupRecord,
-    PlayoffResult,
     GrandFinalResult,
     LeaderboardEntry,
+    PlayoffResult,
+    TierLeaderboard,
 )
 
 log = logging.getLogger(__name__)
@@ -162,9 +161,9 @@ def write_smogon_delta(
     # Reverse so ubers are ranked #1
     all_entries = list(reversed(all_entries))
 
-    tier_rank = {tier: 0 for tier in TIER_ORDER}
+    tier_rank = dict.fromkeys(TIER_ORDER, 0)
     rows = []
-    for i, e in enumerate(all_entries):
+    for _i, e in enumerate(all_entries):
         tier_rank[e.tier] += 1
         rows.append(
             {
@@ -196,7 +195,7 @@ def write_evo_line_report(
 
     # Build name -> entry map
     entry_map: dict[str, LeaderboardEntry] = {}
-    for tier, lb in tier_leaderboards.items():
+    for _tier, lb in tier_leaderboards.items():
         for e in lb.entries:
             entry_map[e.name] = e
 
@@ -291,9 +290,7 @@ def write_summary(gen: int, results: dict) -> None:
                 "phase": "grand_final",
                 "tier": "all",
                 "champion": gf.champion,
-                "champion_win_rate": f"{gf.entries[0].win_rate:.4f}"
-                if gf.entries
-                else "0",
+                "champion_win_rate": f"{gf.entries[0].win_rate:.4f}" if gf.entries else "0",
                 "participants": len(gf.entries),
             }
         )
@@ -310,7 +307,7 @@ def write_all(gen: int, results: dict, pokemon_by_tier: dict) -> None:
     """Write every output file for a completed generation tournament."""
     tier_leaderboards = results.get("tier_leaderboards", {})
 
-    for tier, lb in tier_leaderboards.items():
+    for _tier, lb in tier_leaderboards.items():
         write_tier_leaderboard(lb)
 
     write_playoffs(gen, results.get("playoffs", []))

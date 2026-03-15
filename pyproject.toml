@@ -22,9 +22,59 @@ packages = ["pokerena"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=pokerena --cov-report=term-missing --cov-report=html:htmlcov"
+
+[tool.coverage.run]
+source = ["pokerena"]
+omit = [
+    "tests/*",
+    # Integration/IO modules with no unit tests yet (Phase 1 scope)
+    "pokerena/cli.py",
+    "pokerena/data/loader.py",
+    "pokerena/data/pokeapi.py",
+    "pokerena/report/console.py",
+    "pokerena/report/writers.py",
+    "pokerena/tournament/runner.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 80
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "TID",  # flake8-tidy-imports
+]
+ignore = [
+    "E501",   # line too long -- ruff format handles this
+    "B008",   # do not perform function calls in default args
+    "SIM117", # nested with statements -- readability preference
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pokerena"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.5.1",
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "ruff>=0.15.6",
 ]

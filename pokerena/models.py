@@ -5,7 +5,7 @@ Shared data models used across the entire simulator.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pokerena.engine.types import TypeChart
@@ -44,12 +44,12 @@ class Move:
     accuracy: int  # 0-100; 0 means always hits
     pp: int
     # Status effect this move may inflict, e.g. "burn", "paralysis", None
-    status_effect: Optional[str] = None
+    status_effect: str | None = None
     # Stat stage changes: dict mapping stat name to stage delta, e.g. {"attack": -1}
     stat_changes: dict = field(default_factory=dict)
 
     def score(
-        self, user_types: list[str], defender_types: list[str], type_chart: "TypeChart"
+        self, user_types: list[str], defender_types: list[str], type_chart: TypeChart
     ) -> float:  # noqa: F821
         """Scoring heuristic used by the AI to pick moves."""
         if self.category == "status":
@@ -81,7 +81,7 @@ class Pokemon:
     current_hp: int = 0
     max_hp: int = 0
     stats: dict = field(default_factory=dict)  # computed battle stats
-    status: Optional[str] = None  # burn/paralysis/poison/sleep/freeze
+    status: str | None = None  # burn/paralysis/poison/sleep/freeze
     status_counter: int = 0  # turns remaining for sleep/freeze
     stat_stages: dict = field(default_factory=dict)  # {"attack": 0, ...}
 
