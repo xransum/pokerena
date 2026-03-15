@@ -133,6 +133,8 @@ def load_all(gen: int, force_fetch: bool = False) -> list[Pokemon]:
     Load all Pokemon for a given generation.
     Returns a list of Pokemon instances with full stats, moves, and tier data.
     """
+    from tqdm import tqdm
+
     tier_map = smogon.load_tiers(gen, force_fetch=force_fetch)
 
     # Generation dex ranges (national dex id)
@@ -157,57 +159,67 @@ def load_all(gen: int, force_fetch: bool = False) -> list[Pokemon]:
     evo_lines: dict[str, list[str]] = {}  # name -> ordered line
 
     pokemon_list: list[Pokemon] = []
-    for entry in species_for_gen:
-        name = entry["name"]
-        try:
-            pdata = pokeapi.fetch_pokemon(name)
-            base_stats = pokeapi.parse_base_stats(pdata)
-            types = pokeapi.parse_types(pdata)
-            move_names = pokeapi.get_candidate_move_names(pdata)
-            generation = pokeapi.get_generation_number(pdata)
-            tier = smogon.assign_tier(name, tier_map)
-
-            moves = _select_moveset(move_names, types)
-
-            # Evolutionary line
+    with tqdm(
+        total=len(species_for_gen),
+        unit="mon",
+        desc=f"Loading Gen {gen}",
+        dynamic_ncols=True,
+        leave=False,
+    ) as bar:
+        for entry in species_for_gen:
+            name = entry["name"]
+            bar.set_postfix_str(name, refresh=False)
             try:
-                species_data = pokeapi.fetch_species(name)
-                chain_url = species_data["evolution_chain"]["url"]
-                chain_data = pokeapi.fetch_evolution_chain(chain_url)
-                lines = pokeapi.get_evo_lines(chain_data)
-                # Find the line that contains this Pokemon
-                evo_line: list[str] = [name]
-                evo_stage = 0
-                for line in lines:
-                    if name in line:
-                        evo_line = line
-                        evo_stage = line.index(name)
-                        break
-                # Cache all members of this line
-                for member in evo_line:
-                    evo_lines[member] = evo_line
+                pdata = pokeapi.fetch_pokemon(name)
+                base_stats = pokeapi.parse_base_stats(pdata)
+                types = pokeapi.parse_types(pdata)
+                move_names = pokeapi.get_candidate_move_names(pdata)
+                generation = pokeapi.get_generation_number(pdata)
+                tier = smogon.assign_tier(name, tier_map)
+
+                moves = _select_moveset(move_names, types)
+
+                # Evolutionary line
+                try:
+                    species_data = pokeapi.fetch_species(name)
+                    chain_url = species_data["evolution_chain"]["url"]
+                    chain_data = pokeapi.fetch_evolution_chain(chain_url)
+                    lines = pokeapi.get_evo_lines(chain_data)
+                    # Find the line that contains this Pokemon
+                    evo_line: list[str] = [name]
+                    evo_stage = 0
+                    for line in lines:
+                        if name in line:
+                            evo_line = line
+                            evo_stage = line.index(name)
+                            break
+                    # Cache all members of this line
+                    for member in evo_line:
+                        evo_lines[member] = evo_line
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("Evo line lookup failed for %s: %s", name, exc)
+                    evo_line = [name]
+                    evo_stage = 0
+
+                bst = sum(base_stats.values())
+                poke = Pokemon(
+                    name=name,
+                    types=types,
+                    base_stats=base_stats,
+                    moves=moves,
+                    generation=generation,
+                    smogon_tier=tier,
+                    bst=bst,
+                    evo_line=evo_line,
+                    evo_stage=evo_stage,
+                )
+                pokemon_list.append(poke)
+                log.debug("Loaded %s [%s] tier=%s bst=%d", name, "/".join(types), tier, bst)
+
             except Exception as exc:  # noqa: BLE001
-                log.debug("Evo line lookup failed for %s: %s", name, exc)
-                evo_line = [name]
-                evo_stage = 0
-
-            bst = sum(base_stats.values())
-            poke = Pokemon(
-                name=name,
-                types=types,
-                base_stats=base_stats,
-                moves=moves,
-                generation=generation,
-                smogon_tier=tier,
-                bst=bst,
-                evo_line=evo_line,
-                evo_stage=evo_stage,
-            )
-            pokemon_list.append(poke)
-            log.debug("Loaded %s [%s] tier=%s bst=%d", name, "/".join(types), tier, bst)
-
-        except Exception as exc:  # noqa: BLE001
-            log.warning("Failed to load %s: %s", name, exc)
+                log.warning("Failed to load %s: %s", name, exc)
+            finally:
+                bar.update(1)
 
     log.info("Loaded %d Pokemon for Gen %d", len(pokemon_list), gen)
     return pokemon_list
