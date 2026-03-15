@@ -72,7 +72,9 @@ def _parse_move(raw: dict) -> Move | None:
     )
 
 
-def _select_moveset(move_names: list[str], user_types: list[str]) -> list[Move]:
+def _select_moveset(
+    move_names: list[str], user_types: list[str], force_fetch: bool = False
+) -> list[Move]:
     """
     Fetch up to _MAX_MOVE_FETCH moves and return the best 4:
     - 3 highest-scoring damaging moves
@@ -88,7 +90,7 @@ def _select_moveset(move_names: list[str], user_types: list[str]) -> list[Move]:
         if fetched_count >= _MAX_MOVE_FETCH:
             break
         try:
-            raw = pokeapi.fetch_move(name)
+            raw = pokeapi.fetch_move(name, force=force_fetch)
             move = _parse_move(raw)
             if move is not None:
                 fetched.append(move)
@@ -134,7 +136,9 @@ def _select_moveset(move_names: list[str], user_types: list[str]) -> list[Move]:
     return chosen[:4]
 
 
-def _load_one_entry(name: str, tier_map: dict[str, str]) -> Pokemon | None:
+def _load_one_entry(
+    name: str, tier_map: dict[str, str], force_fetch: bool = False
+) -> Pokemon | None:
     """
     Fetch and assemble a single Pokemon by name.
     Returns None on unrecoverable error (caller should log and skip).
@@ -142,18 +146,18 @@ def _load_one_entry(name: str, tier_map: dict[str, str]) -> Pokemon | None:
     which is thread-safe (disk writes are atomic enough for our purposes).
     """
     try:
-        pdata = pokeapi.fetch_pokemon(name)
+        pdata = pokeapi.fetch_pokemon(name, force=force_fetch)
         base_stats = pokeapi.parse_base_stats(pdata)
         types = pokeapi.parse_types(pdata)
         move_names = pokeapi.get_candidate_move_names(pdata)
         generation = pokeapi.get_generation_number(pdata)
         tier = smogon.assign_tier(name, tier_map)
-        moves = _select_moveset(move_names, types)
+        moves = _select_moveset(move_names, types, force_fetch=force_fetch)
 
         try:
-            species_data = pokeapi.fetch_species(name)
+            species_data = pokeapi.fetch_species(name, force=force_fetch)
             chain_url = species_data["evolution_chain"]["url"]
-            chain_data = pokeapi.fetch_evolution_chain(chain_url)
+            chain_data = pokeapi.fetch_evolution_chain(chain_url, force=force_fetch)
             lines = pokeapi.get_evo_lines(chain_data)
             evo_line: list[str] = [name]
             evo_stage = 0
@@ -208,7 +212,7 @@ def load_all(gen: int, force_fetch: bool = False) -> list[Pokemon]:
     dex_start, dex_end = gen_ranges.get(gen, (1, 151))
 
     log.info("Fetching Pokemon list...")
-    all_species = pokeapi.fetch_pokemon_list(limit=dex_end)
+    all_species = pokeapi.fetch_pokemon_list(limit=dex_end, force=force_fetch)
     species_for_gen = all_species[dex_start - 1 : dex_end]
 
     results: list[Pokemon | None] = [None] * len(species_for_gen)
@@ -222,7 +226,7 @@ def load_all(gen: int, force_fetch: bool = False) -> list[Pokemon]:
     ) as bar:
         with ThreadPoolExecutor(max_workers=_FETCH_WORKERS) as pool:
             future_to_idx = {
-                pool.submit(_load_one_entry, entry["name"], tier_map): i
+                pool.submit(_load_one_entry, entry["name"], tier_map, force_fetch): i
                 for i, entry in enumerate(species_for_gen)
             }
             for fut in as_completed(future_to_idx):

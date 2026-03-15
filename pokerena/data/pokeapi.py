@@ -63,43 +63,50 @@ def _get(url: str) -> dict:
     raise last_exc  # type: ignore[misc]
 
 
-def _fetch_cached(namespace: str, key: str, url: str) -> dict:
-    """Return cached data if present, otherwise fetch from URL, cache, and return."""
-    cached = disk_cache.get(namespace, key)
-    if cached is not None:
-        return cached  # type: ignore[return-value]
+def _fetch_cached(namespace: str, key: str, url: str, force: bool = False) -> dict:
+    """Return cached data if present, otherwise fetch from URL, cache, and return.
+
+    When force=True the cache is bypassed and the URL is always fetched,
+    overwriting any existing cached file.
+    """
+    if not force:
+        cached = disk_cache.get(namespace, key)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
     log.debug("Fetching %s", url)
     data = _get(url)
     disk_cache.put(namespace, key, data)
     return data
 
 
-def fetch_pokemon_list(limit: int = 2000) -> list[dict]:
+def fetch_pokemon_list(limit: int = 2000, force: bool = False) -> list[dict]:
     """Return the raw PokeAPI species list (name + url pairs)."""
-    data = _fetch_cached("pokeapi", "pokemon_list", f"{_BASE}/pokemon?limit={limit}")
+    data = _fetch_cached("pokeapi", "pokemon_list", f"{_BASE}/pokemon?limit={limit}", force=force)
     return data["results"]
 
 
-def fetch_pokemon(name: str) -> dict:
+def fetch_pokemon(name: str, force: bool = False) -> dict:
     """Return raw PokeAPI /pokemon/{name} payload, cached."""
-    return _fetch_cached("pokeapi", f"pokemon_{name}", f"{_BASE}/pokemon/{name}")
+    return _fetch_cached("pokeapi", f"pokemon_{name}", f"{_BASE}/pokemon/{name}", force=force)
 
 
-def fetch_species(name: str) -> dict:
+def fetch_species(name: str, force: bool = False) -> dict:
     """Return raw PokeAPI /pokemon-species/{name} payload, cached."""
-    return _fetch_cached("pokeapi", f"species_{name}", f"{_BASE}/pokemon-species/{name}")
+    return _fetch_cached(
+        "pokeapi", f"species_{name}", f"{_BASE}/pokemon-species/{name}", force=force
+    )
 
 
-def fetch_move(name: str) -> dict:
+def fetch_move(name: str, force: bool = False) -> dict:
     """Return raw PokeAPI /move/{name} payload, cached."""
-    return _fetch_cached("pokeapi", f"move_{name}", f"{_BASE}/move/{name}")
+    return _fetch_cached("pokeapi", f"move_{name}", f"{_BASE}/move/{name}", force=force)
 
 
-def fetch_evolution_chain(url: str) -> dict:
+def fetch_evolution_chain(url: str, force: bool = False) -> dict:
     """Fetch an evolution chain by its full URL."""
     # Derive a stable cache key from the URL id
     chain_id = url.rstrip("/").split("/")[-1]
-    return _fetch_cached("pokeapi", f"evochain_{chain_id}", url)
+    return _fetch_cached("pokeapi", f"evochain_{chain_id}", url, force=force)
 
 
 def get_generation_number(pokemon_data: dict) -> int:

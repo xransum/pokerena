@@ -162,7 +162,15 @@ def cli() -> None:
 
 @cli.command()
 @click.option(
-    "--gen", default=1, metavar="N", show_default=True, help="Generation to simulate (1-9)."
+    "--gen",
+    default=1,
+    metavar="N",
+    show_default=True,
+    help=(
+        "Generation to simulate (1-9). Controls the roster: Gen 1 = dex 1-151, "
+        "Gen 2 = dex 1-251, ..., Gen 9 = all 1025 Pokemon. "
+        "Use --gen 9 or --all-gens to include the full roster."
+    ),
 )
 @click.option("--all-gens", is_flag=True, help="Run all generations 1-9 sequentially.")
 @click.option(
@@ -524,22 +532,32 @@ def db() -> None:
     default=None,
     type=int,
     metavar="N",
-    help="Generation to fetch (1-9). Omit to fetch all generations.",
+    help=(
+        "Generation to fetch (1-9). Each generation fetches the cumulative dex range: "
+        "Gen 1 = 151 Pokemon, Gen 2 = 251, ..., Gen 9 = all 1025. "
+        "Use --all-gens to fetch every generation."
+    ),
 )
 @click.option("--all-gens", is_flag=True, help="Fetch all generations 1-9.")
+@click.option("--force", is_flag=True, help="Re-fetch even if data is already cached.")
 @click.option("--verbose", "-v", is_flag=True, help="Enable debug logging.")
-def db_fetch(gen: int | None, all_gens: bool, verbose: bool) -> None:
+def db_fetch(gen: int | None, all_gens: bool, force: bool, verbose: bool) -> None:
     """Download and cache PokeAPI and Smogon data.
 
     Fetches all Pokemon data for the given generation and writes it to the
-    local cache. Subsequent runs (including tournaments) will use the cache
-    and skip network requests unless --fetch is passed.
+    local cache. Each generation covers a cumulative dex range starting from
+    dex 1: Gen 1 = 151 Pokemon, Gen 2 = 251, Gen 9 = all 1025.
+
+    Subsequent runs (including tournaments) will use the cache and skip network
+    requests. Use --force to re-fetch and overwrite existing cached files.
 
     Examples:
 
     \b
         pokerena db fetch --gen 1
+        pokerena db fetch --gen 9
         pokerena db fetch --all-gens
+        pokerena db fetch --gen 1 --force
     """
     _setup_logging(verbose)
     if all_gens:
@@ -548,13 +566,14 @@ def db_fetch(gen: int | None, all_gens: bool, verbose: bool) -> None:
         gens = [gen]
     else:
         click.echo("Specify --gen N or --all-gens.")
-        click.echo("  pokerena db fetch --gen 1")
-        click.echo("  pokerena db fetch --all-gens")
+        click.echo("  pokerena db fetch --gen 1     # fetch Gen 1 roster (151 Pokemon)")
+        click.echo("  pokerena db fetch --gen 9     # fetch all 1025 Pokemon")
+        click.echo("  pokerena db fetch --all-gens  # fetch every generation")
         return
 
     for g in gens:
         click.echo(f"Fetching Gen {g}...")
-        pokemon = load_all(g, force_fetch=True)
+        pokemon = load_all(g, force_fetch=force)
         click.echo(f"  Cached {len(pokemon)} Pokemon for Gen {g}.")
 
 

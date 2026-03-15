@@ -114,18 +114,47 @@ Available `--sort` fields: `name`, `bst`, `tier`, `gen`, `hp`, `attack`, `defens
 ### Manage the cache
 
 ```bash
+# Pre-populate the cache for a generation before running a tournament
+pokerena db fetch --gen 1    # 151 Pokemon (Gen 1 roster)
+pokerena db fetch --gen 9    # all 1025 Pokemon
+pokerena db fetch --all-gens # every generation
+
+# Force re-fetch even if cached files already exist
+pokerena db fetch --gen 1 --force
+
 # Show cache location and per-namespace file counts
-pokerena cache info
+pokerena db info
+
+# Show per-generation coverage
+pokerena db status
 
 # Clear everything
-pokerena cache clear
+pokerena db clear
 
 # Clear only Smogon tier data (keeps PokeAPI data)
-pokerena cache clear smogon
+pokerena db clear smogon
 
 # Clear only PokeAPI data
-pokerena cache clear pokeapi
+pokerena db clear pokeapi
 ```
+
+**What `--gen N` means for the roster:** each generation covers a *cumulative*
+national dex range starting from dex 1. It is not a filter for newly introduced
+Pokemon -- it defines the full competitive roster for that era:
+
+| `--gen` | Roster |
+|---------|--------|
+| 1 | dex 1-151 (151 Pokemon) |
+| 2 | dex 1-251 (251 Pokemon) |
+| 3 | dex 1-386 |
+| 4 | dex 1-493 |
+| 5 | dex 1-649 |
+| 6 | dex 1-721 |
+| 7 | dex 1-809 |
+| 8 | dex 1-905 |
+| 9 | dex 1-1025 (full roster) |
+
+To simulate all Pokemon across all generations, use `--gen 9` or `--all-gens`.
 
 ## Output
 
