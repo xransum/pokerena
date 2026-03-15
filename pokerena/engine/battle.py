@@ -169,9 +169,7 @@ def _status_is_advantageous(attacker: Pokemon, defender: Pokemon) -> bool:
     - Poison and sleep are always advantageous (unconditional HP drain /
       action denial) unless the defender is immune.
     """
-    if defender.status is not None:
-        return False
-    return True
+    return defender.status is None
 
 
 def _choose_move(attacker: Pokemon, defender: Pokemon, rules: BattleRules | None = None) -> Move:
