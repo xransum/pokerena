@@ -240,7 +240,8 @@ def run_tier_tournament(
     ]
 
     records: list[MatchupRecord] = []
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    pool = ProcessPoolExecutor(max_workers=workers)
+    try:
         futures = {pool.submit(_run_matchup_worker, t): t for t in tasks}
         for fut in as_completed(futures):
             try:
@@ -249,6 +250,11 @@ def run_tier_tournament(
                 log.error("Matchup failed: %s", exc)
             if progress is not None:
                 progress.update(n_battles)
+    except KeyboardInterrupt:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        pool.shutdown(wait=True)
 
     leaderboard = _build_leaderboard(tier, pokemon, records)
     return leaderboard, records
@@ -415,7 +421,8 @@ def run_grand_final(
     ]
 
     records: list[MatchupRecord] = []
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    pool = ProcessPoolExecutor(max_workers=workers)
+    try:
         futures = {pool.submit(_run_matchup_worker, t): t for t in tasks}
         for fut in as_completed(futures):
             try:
@@ -424,6 +431,11 @@ def run_grand_final(
                 log.error("Grand final matchup failed: %s", exc)
             if progress is not None:
                 progress.update(n_battles)
+    except KeyboardInterrupt:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        pool.shutdown(wait=True)
 
     # Build win totals
     wins: dict[str, int] = defaultdict(int)
