@@ -22,7 +22,7 @@ import nox
 nox.options.sessions = ["pre-commit", "fmt", "lint", "tests", "coverage", "docs"]
 nox.options.default_venv_backend = "uv"
 
-PYTHON = "3.11"
+PYTHON = "3.13"
 SRC = "pokerena"
 TESTS = "tests"
 
@@ -97,7 +97,7 @@ def docs(session: nox.Session) -> None:
     Pass -- serve to start a local live-reload server instead of building:
         uv run nox -p 3.11 -s docs -- serve
     """
-    _install_dev(session, "mkdocs", "mkdocs-material", "mkdocstrings[python]")
+    _install_dev(session, "mkdocs", "mkdocs-material", "mkdocstrings[python]", "mkdocs-click")
     if session.posargs and session.posargs[0] == "serve":
         session.run("mkdocs", "serve")
     else:

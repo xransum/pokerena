@@ -62,6 +62,7 @@ nav:
       - Writers: api/writers.md
 
 markdown_extensions:
+  - mkdocs-click
   - admonition
   - pymdownx.details
   - pymdownx.superfences
