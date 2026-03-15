@@ -2,12 +2,14 @@
 CLI entry point for pokerena.
 
 Commands:
-  pokerena [options]                run a tournament simulation
-  pokerena battle <name> <name>     run a single battle between two named Pokemon
-  pokerena battle --random          pick two random Pokemon and battle them
-  pokerena cache info               show cached namespaces and file counts
-  pokerena cache clear [NAMESPACE]  delete cached data
-  pokerena search                   list and filter Pokemon by name/type/tier/gen/BST
+  pokerena run [options]              run a tournament simulation
+  pokerena battle <name> <name>       run a single battle between two named Pokemon
+  pokerena battle --random            pick two random Pokemon and battle them
+  pokerena search                     list and filter Pokemon by name/type/tier/gen/BST
+  pokerena db fetch [--gen N]         download and cache PokeAPI + Smogon data
+  pokerena db info                    show cached namespaces and file counts
+  pokerena db clear [NAMESPACE]       delete cached data
+  pokerena db status                  show per-gen cache coverage
 """
 
 from __future__ import annotations
@@ -73,7 +75,7 @@ def _run_gen(gen: int, args: dict) -> None:
 
     pokemon = load_all(gen, force_fetch=args["fetch"])
     if not pokemon:
-        click.echo(f"No Pokemon loaded for Gen {gen}. Run with --fetch to download data.")
+        click.echo(f"No Pokemon loaded for Gen {gen}. Run 'pokerena db fetch --gen {gen}' first.")
         return
 
     pokemon_by_tier: dict[str, list] = defaultdict(list)
@@ -147,7 +149,18 @@ def _run_gen(gen: int, args: dict) -> None:
     writers.write_all(gen=gen, results=results, pokemon_by_tier=dict(pokemon_by_tier))
 
 
-@click.group(invoke_without_command=True)
+@click.group()
+def cli() -> None:
+    """Pokemon battle tournament simulator.
+
+    Simulate full round-robin tournaments across Smogon tiers, run
+    head-to-head battles, search the roster, and manage local cached data.
+
+    Run 'pokerena COMMAND --help' for details on any subcommand.
+    """
+
+
+@cli.command()
 @click.option(
     "--gen", default=1, metavar="N", show_default=True, help="Generation to simulate (1-9)."
 )
@@ -168,7 +181,7 @@ def _run_gen(gen: int, args: dict) -> None:
     help="Random seed for reproducibility. Use with --rand-ivs.",
 )
 @click.option(
-    "--fetch", is_flag=True, help="Force re-fetch of PokeAPI and Smogon data (clears cache)."
+    "--fetch", is_flag=True, help="Force re-fetch of PokeAPI and Smogon data before running."
 )
 @click.option(
     "--top",
@@ -186,9 +199,7 @@ def _run_gen(gen: int, args: dict) -> None:
 )
 @click.option("--gen1-mode", is_flag=True, help="Use Gen 1 stat formula instead of Gen 3+ default.")
 @click.option("--verbose", "-v", is_flag=True, help="Enable debug logging to stderr.")
-@click.pass_context
-def cli(
-    ctx: click.Context,
+def run(
     gen: int,
     all_gens: bool,
     battles: int,
@@ -200,30 +211,35 @@ def cli(
     gen1_mode: bool,
     verbose: bool,
 ) -> None:
-    """Pokemon battle tournament simulator.
+    """Run a full tournament simulation for one or all generations.
 
-    Runs full round-robin tournaments within each Smogon tier, adjacent-tier
-    playoffs, and a grand final. Results are written to results/gen{N}/.
+    Runs round-robin battles within each Smogon tier (Phase 1), adjacent-tier
+    playoffs (Phase 2), and a grand final (Phase 3). Results are written to
+    results/gen{N}/.
 
-    Run without a subcommand to start a simulation. Use a subcommand for
-    individual battles, roster search, or cache management.
+    Examples:
+
+    \b
+        pokerena run
+        pokerena run --gen 2 --battles 50
+        pokerena run --all-gens --workers 8
+        pokerena run --gen 1 --rand-ivs --seed 42
     """
     _setup_logging(verbose)
-    if ctx.invoked_subcommand is None:
-        args = {
-            "battles": battles,
-            "rand_ivs": rand_ivs,
-            "seed": seed,
-            "fetch": fetch,
-            "top": top,
-            "workers": workers,
-            "gen1_mode": gen1_mode,
-        }
-        if all_gens:
-            for g in range(1, 10):
-                _run_gen(g, args)
-        else:
-            _run_gen(gen, args)
+    args = {
+        "battles": battles,
+        "rand_ivs": rand_ivs,
+        "seed": seed,
+        "fetch": fetch,
+        "top": top,
+        "workers": workers,
+        "gen1_mode": gen1_mode,
+    }
+    if all_gens:
+        for g in range(1, 10):
+            _run_gen(g, args)
+    else:
+        _run_gen(gen, args)
 
 
 @cli.command()
@@ -280,7 +296,7 @@ def battle(
         click.echo(f"Loading Gen {gen} roster...")
         roster = load_all(gen)
         if len(roster) < 2:
-            click.echo("Not enough Pokemon loaded. Run with --fetch first.")
+            click.echo("Not enough Pokemon loaded. Run 'pokerena db fetch' first.")
             return
         poke_a, poke_b = rng.sample(roster, 2)
     elif len(pokemon) == 2:
@@ -324,48 +340,6 @@ def battle(
     if result.attacker_had_advantage:
         click.echo("  (winner had a type advantage)")
     click.echo("")
-
-
-@cli.group()
-def cache() -> None:
-    """Manage the local PokeAPI and Smogon data cache.
-
-    Cached data lives at ~/.cache/pokerena/ (Linux/macOS) or
-    %LOCALAPPDATA%\\pokerena\\Cache\\ (Windows).
-    """
-
-
-@cache.command("info")
-def cache_info() -> None:
-    """Show the cache location and per-namespace file counts."""
-    sizes = disk_cache.cache_size()
-    root = disk_cache._CACHE_ROOT
-    if not sizes:
-        click.echo(f"Cache is empty ({root})")
-        return
-    click.echo(f"Cache location: {root}")
-    for ns, count in sizes.items():
-        click.echo(f"  {ns}: {count} file{'s' if count != 1 else ''}")
-
-
-@cache.command("clear")
-@click.argument("namespace", required=False, default=None, metavar="NAMESPACE")
-def cache_clear(namespace: str | None) -> None:
-    """Delete cached files.
-
-    Omit NAMESPACE to clear everything. Specify 'smogon' or 'pokeapi' to
-    clear only that namespace.
-
-    Examples:
-
-    \b
-        pokerena cache clear
-        pokerena cache clear smogon
-        pokerena cache clear pokeapi
-    """
-    count = disk_cache.clear(namespace)
-    scope = namespace if namespace else "all namespaces"
-    click.echo(f"Cleared {count} file{'s' if count != 1 else ''} from {scope}.")
 
 
 @cli.command()
@@ -533,6 +507,134 @@ def search(
         click.echo(sep.join(cell.ljust(widths[i]) for i, cell in enumerate(row)))
     click.echo("")
     click.echo(f"{len(results)} result{'s' if len(results) != 1 else ''}")
+
+
+@cli.group()
+def db() -> None:
+    """Manage the local PokeAPI and Smogon data cache.
+
+    Cached data lives at ~/.cache/pokerena/ (Linux/macOS) or
+    %LOCALAPPDATA%\\pokerena\\Cache\\ (Windows).
+    """
+
+
+@db.command("fetch")
+@click.option(
+    "--gen",
+    default=None,
+    type=int,
+    metavar="N",
+    help="Generation to fetch (1-9). Omit to fetch all generations.",
+)
+@click.option("--all-gens", is_flag=True, help="Fetch all generations 1-9.")
+@click.option("--verbose", "-v", is_flag=True, help="Enable debug logging.")
+def db_fetch(gen: int | None, all_gens: bool, verbose: bool) -> None:
+    """Download and cache PokeAPI and Smogon data.
+
+    Fetches all Pokemon data for the given generation and writes it to the
+    local cache. Subsequent runs (including tournaments) will use the cache
+    and skip network requests unless --fetch is passed.
+
+    Examples:
+
+    \b
+        pokerena db fetch --gen 1
+        pokerena db fetch --all-gens
+    """
+    _setup_logging(verbose)
+    if all_gens:
+        gens = list(range(1, 10))
+    elif gen is not None:
+        gens = [gen]
+    else:
+        click.echo("Specify --gen N or --all-gens.")
+        click.echo("  pokerena db fetch --gen 1")
+        click.echo("  pokerena db fetch --all-gens")
+        return
+
+    for g in gens:
+        click.echo(f"Fetching Gen {g}...")
+        pokemon = load_all(g, force_fetch=True)
+        click.echo(f"  Cached {len(pokemon)} Pokemon for Gen {g}.")
+
+
+@db.command("info")
+def db_info() -> None:
+    """Show the cache location and per-namespace file counts."""
+    sizes = disk_cache.cache_size()
+    root = disk_cache._CACHE_ROOT
+    if not sizes:
+        click.echo(f"Cache is empty ({root})")
+        return
+    click.echo(f"Cache location: {root}")
+    total = 0
+    for ns, count in sizes.items():
+        click.echo(f"  {ns}: {count} file{'s' if count != 1 else ''}")
+        total += count
+    click.echo(f"  total: {total} file{'s' if total != 1 else ''}")
+
+
+@db.command("clear")
+@click.argument("namespace", required=False, default=None, metavar="NAMESPACE")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
+def db_clear(namespace: str | None, yes: bool) -> None:
+    """Delete cached files.
+
+    Omit NAMESPACE to clear everything. Specify 'smogon' or 'pokeapi' to
+    clear only that namespace.
+
+    Examples:
+
+    \b
+        pokerena db clear
+        pokerena db clear smogon
+        pokerena db clear pokeapi
+    """
+    scope = namespace if namespace else "all namespaces"
+    if not yes:
+        click.confirm(f"Clear cache for {scope}?", abort=True)
+    count = disk_cache.clear(namespace)
+    click.echo(f"Cleared {count} file{'s' if count != 1 else ''} from {scope}.")
+
+
+@db.command("status")
+def db_status() -> None:
+    """Show per-generation cache coverage.
+
+    Reports how many Pokemon are cached for each generation and whether
+    the data looks complete based on expected dex ranges.
+    """
+
+    # Expected max dex ID per generation (cumulative).
+    gen_expected = {1: 151, 2: 251, 3: 386, 4: 493, 5: 649, 6: 721, 7: 809, 8: 905, 9: 1025}
+
+    sizes = disk_cache.cache_size()
+    if not sizes:
+        click.echo("Cache is empty. Run 'pokerena db fetch --gen N' to populate it.")
+        return
+
+    pokeapi_count = sizes.get("pokeapi", 0)
+    smogon_count = sizes.get("smogon", 0)
+
+    click.echo(f"PokeAPI entries cached : {pokeapi_count}")
+    click.echo(f"Smogon tier files      : {smogon_count}")
+    click.echo("")
+    click.echo(f"  {'Gen':<5} {'Expected':<10} {'Cached':<10} {'Status'}")
+    click.echo(f"  {'-' * 4:<5} {'-' * 8:<10} {'-' * 6:<10} {'-' * 8}")
+
+    for g, expected in gen_expected.items():
+        # Smogon caches one file per gen (e.g. "gen1").
+        has_smogon = disk_cache.exists("smogon", f"gen{g}")
+        # PokeAPI entry count is a rough proxy -- we can't know exactly which
+        # dex IDs are cached without listing them, so we compare total count
+        # against the expected ceiling for that gen.
+        if pokeapi_count >= expected and has_smogon:
+            status = click.style("ready", fg="green")
+        elif pokeapi_count > 0 or has_smogon:
+            status = click.style("partial", fg="yellow")
+        else:
+            status = click.style("missing", fg="red", dim=True)
+        click.echo(f"  {g:<5} {expected:<10} {min(pokeapi_count, expected):<10} {status}")
 
 
 def main() -> None:
