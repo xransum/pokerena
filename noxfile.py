@@ -19,7 +19,7 @@ coverage    -- pytest with coverage enforcement (fail_under=80)
 import nox
 
 # Pin to 3.11 -- never run a matrix accidentally.
-nox.options.sessions = ["pre-commit", "fmt", "lint", "tests", "coverage"]
+nox.options.sessions = ["pre-commit", "fmt", "lint", "tests", "coverage", "docs"]
 nox.options.default_venv_backend = "uv"
 
 PYTHON = "3.11"
@@ -88,3 +88,17 @@ def coverage(session: nox.Session) -> None:
         "-q",
         TESTS,
     )
+
+
+@nox.session(python=PYTHON)
+def docs(session: nox.Session) -> None:
+    """Build the MkDocs documentation site.
+
+    Pass -- serve to start a local live-reload server instead of building:
+        uv run nox -p 3.11 -s docs -- serve
+    """
+    _install_dev(session, "mkdocs", "mkdocs-material", "mkdocstrings[python]")
+    if session.posargs and session.posargs[0] == "serve":
+        session.run("mkdocs", "serve")
+    else:
+        session.run("mkdocs", "build", "--strict")
