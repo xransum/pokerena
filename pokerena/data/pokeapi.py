@@ -8,6 +8,8 @@ Never hits the network during simulation if cache is warm.
 from __future__ import annotations
 
 import logging
+import random
+import time
 
 import requests
 
@@ -17,12 +19,48 @@ log = logging.getLogger(__name__)
 
 _BASE = "https://pokeapi.co/api/v2"
 
+# Retry configuration for transient failures (429, 5xx, network errors).
+# Wait time for attempt N (1-indexed): _RETRY_BASE_MS * N + uniform(0, _RETRY_JITTER_MS).
+_RETRY_MAX = 3
+_RETRY_BASE_MS = 250
+_RETRY_JITTER_MS = 100
+# HTTP status codes that are worth retrying (rate-limited or server-side transient).
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
 
 def _get(url: str) -> dict:
-    """Make a GET request and return the parsed JSON response."""
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    """
+    Make a GET request and return the parsed JSON response.
+
+    Retries up to _RETRY_MAX times on transient failures (429, 5xx, network
+    errors) using a linear ramp with random jitter between attempts:
+        wait = _RETRY_BASE_MS * attempt + uniform(0, _RETRY_JITTER_MS)  (ms)
+    Raises on non-retryable HTTP errors or after exhausting all retries.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1, _RETRY_MAX + 2):  # attempts 1..(_RETRY_MAX+1)
+        try:
+            resp = requests.get(url, timeout=10)
+            if resp.status_code not in _RETRY_STATUSES:
+                resp.raise_for_status()
+                return resp.json()
+            # Retryable HTTP status
+            exc = requests.HTTPError(response=resp)
+        except requests.RequestException as exc:  # noqa: BLE001
+            last_exc = exc
+        else:
+            last_exc = exc  # type: ignore[assignment]
+
+        if attempt > _RETRY_MAX:
+            break
+
+        wait_s = (_RETRY_BASE_MS * attempt + random.uniform(0, _RETRY_JITTER_MS)) / 1000.0
+        log.debug(
+            "Request failed (%s), retry %d/%d in %.2fs", last_exc, attempt, _RETRY_MAX, wait_s
+        )
+        time.sleep(wait_s)
+
+    raise last_exc  # type: ignore[misc]
 
 
 def _fetch_cached(namespace: str, key: str, url: str) -> dict:
