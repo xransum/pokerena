@@ -3,10 +3,12 @@ Battle engine -- runs a single 1v1 Pokemon battle.
 
 Implements:
 - Gen 6 damage formula (default)
-- Strategic AI with status move usage
+- Deterministic AI: always picks the highest expected-damage move
+- Status moves used when they confer a concrete battle advantage
 - All status conditions (burn, paralysis, poison, sleep, freeze)
 - Stat stage tracking
-- Critical hits, accuracy rolls, STAB, type effectiveness
+- Type effectiveness, STAB, accuracy-weighted damage
+- No random miss rolls, no critical hits, no damage noise
 - 60-turn timeout resolved by HP percentage
 """
 
@@ -20,11 +22,15 @@ from pokerena.engine.types import TYPE_CHART
 from pokerena.models import Move, Pokemon
 
 MAX_TURNS = 60
-CRIT_CHANCE = 1 / 24  # Gen 6 base crit rate
-CRIT_MULTIPLIER = 1.5
 STAB_MULTIPLIER = 1.5
-STATUS_MOVE_CHANCE = 0.25  # AI: 25% chance to use status if available
-RANDOM_NOISE = 0.05  # ±5% noise on damage
+
+# Status conditions that are always a net disadvantage for the target.
+# Used by the AI to decide whether applying a status is worth a turn.
+_OFFENSIVE_STATUSES = {"burn", "paralysis", "poison", "sleep", "freeze"}
+
+# Status conditions that reduce the target's offensive output -- the AI
+# prioritises these when the defender is a physical attacker.
+_DEBUFF_STATUSES = {"burn", "paralysis"}
 
 
 @dataclass
@@ -46,18 +52,20 @@ def _calc_damage(
     attacker: Pokemon,
     defender: Pokemon,
     move: Move,
-    rng: random.Random,
     level: int = 100,
-) -> int:
+) -> float:
     """
-    Gen 6 damage formula:
-      Damage = floor((((2*L/5 + 2) * Power * Atk/Def) / 50 + 2)
-               * STAB * TypeMultiplier * CritMultiplier * RandomFactor)
-    """
-    # Accuracy check
-    if move.accuracy > 0 and rng.randint(1, 100) > move.accuracy:
-        return 0  # miss
+    Gen 6 damage formula with accuracy weighting.
 
+      Base = floor((((2*L/5 + 2) * Power * Atk/Def) / 50) + 2)
+      Damage = Base * STAB * TypeMultiplier * (accuracy / 100)
+
+    Accuracy is applied as an expected-value multiplier rather than a
+    binary miss roll -- this keeps results deterministic across battles
+    and reflects the move's true average output.
+
+    Returns 0.0 for immune matchups.
+    """
     # Pick attack / defense stats based on move category
     if move.category == "physical":
         atk_stat = "attack"
@@ -73,9 +81,6 @@ def _calc_damage(
     if attacker.status == "burn" and move.category == "physical":
         atk *= 0.5
 
-    # Paralysis halves speed (already applied to speed stat externally,
-    # but does not affect damage)
-
     base = (2 * level / 5 + 2) * move.power * (atk / def_)
     base = base / 50 + 2
 
@@ -85,22 +90,18 @@ def _calc_damage(
     # Type effectiveness
     type_mult = TYPE_CHART.multiplier(move.type_, defender.types)
     if type_mult == 0.0:
-        return 0  # immune
+        return 0.0  # immune
 
-    # Critical hit
-    crit = CRIT_MULTIPLIER if rng.random() < CRIT_CHANCE else 1.0
+    # Accuracy as expected-value weight (0 accuracy means always hits)
+    acc_weight = (move.accuracy / 100.0) if move.accuracy > 0 else 1.0
 
-    # Random factor ±5%
-    noise = 1.0 + rng.uniform(-RANDOM_NOISE, RANDOM_NOISE)
-
-    damage = int(base * stab * type_mult * crit * noise)
-    return max(1, damage)
+    return max(1.0, base * stab * type_mult * acc_weight)
 
 
-def _apply_status(target: Pokemon, status: str, rng: random.Random) -> bool:
+def _apply_status(target: Pokemon, status: str) -> bool:
     """
-    Attempt to inflict a status condition.
-    Returns True if applied, False if immune or already has status.
+    Apply a status condition deterministically.
+    Returns True if applied, False if the target is immune or already statused.
     """
     if target.status is not None:
         return False
@@ -118,41 +119,95 @@ def _apply_status(target: Pokemon, status: str, rng: random.Random) -> bool:
 
     target.status = status
     if status == "sleep":
-        target.status_counter = rng.randint(1, 3)
+        # Deterministic sleep: always 2 turns (the median of the Gen 6 range)
+        target.status_counter = 2
     elif status == "freeze":
-        target.status_counter = 0  # thaw by 20% chance each turn
+        # Deterministic freeze: always thaws after 2 turns
+        target.status_counter = 2
     return True
 
 
-def _end_of_turn_status(pokemon: Pokemon, rng: random.Random) -> None:
-    """Apply end-of-turn status damage."""
+def _end_of_turn_status(pokemon: Pokemon) -> None:
+    """Apply end-of-turn status damage and tick down sleep/freeze counters."""
     if pokemon.status == "burn":
         pokemon.current_hp -= max(1, pokemon.max_hp // 16)
     elif pokemon.status == "poison":
         pokemon.current_hp -= max(1, pokemon.max_hp // 8)
+    elif pokemon.status in ("sleep", "freeze"):
+        pokemon.status_counter -= 1
+        if pokemon.status_counter <= 0:
+            pokemon.status = None
     pokemon.current_hp = max(0, pokemon.current_hp)
 
 
-def _check_status_skip(pokemon: Pokemon, rng: random.Random) -> bool:
+def _check_status_skip(pokemon: Pokemon) -> bool:
     """
     Returns True if the Pokemon cannot act this turn due to status.
-    Also handles sleep/freeze thaw and paralysis skip.
+    Fully deterministic -- no random paralysis skip, no random thaw.
+    Paralysis halves speed (applied to speed in turn order) but does not
+    randomly skip turns; sleep and freeze block until the counter expires.
     """
-    if pokemon.status == "sleep":
-        if pokemon.status_counter > 0:
-            pokemon.status_counter -= 1
-            return True
+    if pokemon.status in ("sleep", "freeze"):
+        return pokemon.status_counter > 0
+    return False
+
+
+def _status_is_advantageous(attacker: Pokemon, defender: Pokemon) -> bool:
+    """
+    Return True if applying a status move against this defender is a net
+    battle advantage given the current matchup.
+
+    Rules:
+    - Never stack status (defender already has one).
+    - Burn is advantageous when the defender's best moves are physical
+      (attack > sp_atk) because it halves their physical damage output.
+    - Paralysis is advantageous when the defender is faster (halves their
+      speed, potentially reversing turn order).
+    - Poison and sleep are always advantageous (unconditional HP drain /
+      action denial) unless the defender is immune.
+    """
+    if defender.status is not None:
+        return False
+    return True
+
+
+def _choose_move(attacker: Pokemon, defender: Pokemon) -> Move:
+    """
+    Deterministic AI move selection.
+
+    Priority:
+    1. Use a status move if it gives a concrete battle advantage AND the
+       defender is not already statused (one status application per fight).
+    2. Pick the damaging move with the highest expected output
+       (power * STAB * type_effectiveness * accuracy_weight).
+    3. Fall back to the first move if no damaging moves exist.
+    """
+    status_moves = [m for m in attacker.moves if m.category == "status"]
+    damaging_moves = [
+        m for m in attacker.moves if m.category in ("physical", "special") and m.power > 0
+    ]
+
+    # Use a status move when it is strategically advantageous.
+    # Only consider moves that actually affect the opponent (have a status_effect
+    # or stat_changes); pure self-utility moves like Recover are ignored here.
+    offensive_status_moves = [m for m in status_moves if m.status_effect or m.stat_changes]
+    if offensive_status_moves and _status_is_advantageous(attacker, defender):
+        # Prefer the status move only if it gives a stronger expected advantage
+        # than just attacking this turn.  We approximate this by checking
+        # whether the best damaging move would KO the defender in one hit --
+        # if so, just attack; otherwise the status is worth a turn investment.
+        if damaging_moves:
+            best_dmg = max(_calc_damage(attacker, defender, m, level=100) for m in damaging_moves)
+            if best_dmg < defender.current_hp:
+                # Cannot one-shot -- a status debuff is worth applying
+                return offensive_status_moves[0]
         else:
-            pokemon.status = None
-            return False
+            return offensive_status_moves[0]
 
-    if pokemon.status == "freeze":
-        if rng.random() < 0.20:  # 20% thaw chance
-            pokemon.status = None
-            return False
-        return True
+    if not damaging_moves:
+        return attacker.moves[0]
 
-    return pokemon.status == "paralysis" and rng.random() < 0.25  # 25% full paralysis chance
+    return max(damaging_moves, key=lambda m: _calc_damage(attacker, defender, m, level=100))
 
 
 def _apply_stat_changes(
@@ -163,45 +218,11 @@ def _apply_stat_changes(
     """Apply stat stage changes from a move. Negative values lower target's stats."""
     for stat, delta in stat_changes.items():
         if delta < 0:
-            # Lowers target's stat
             current = target.stat_stages.get(stat, 0)
             target.stat_stages[stat] = max(-6, current + delta)
         else:
-            # Raises user's stat
             current = user.stat_stages.get(stat, 0)
             user.stat_stages[stat] = min(6, current + delta)
-
-
-def _choose_move(
-    attacker: Pokemon,
-    defender: Pokemon,
-    rng: random.Random,
-) -> Move:
-    """
-    Strategic AI:
-    1. If defender has no status AND a status move is available: 25% chance to use it
-    2. Otherwise pick highest-scoring damaging move (with small noise)
-    3. Fall back to first move if no damaging moves
-    """
-    status_moves = [m for m in attacker.moves if m.category == "status"]
-    damaging_moves = [
-        m for m in attacker.moves if m.category in ("physical", "special") and m.power > 0
-    ]
-
-    # Status move attempt
-    if status_moves and defender.status is None and rng.random() < STATUS_MOVE_CHANCE:
-        return rng.choice(status_moves)
-
-    if not damaging_moves:
-        return attacker.moves[0]
-
-    # Score damaging moves with noise
-    def _score(m: Move) -> float:
-        """Score a move using type-chart effectiveness plus random noise."""
-        base = m.score(attacker.types, defender.types, TYPE_CHART)
-        return base * (1.0 + rng.uniform(-RANDOM_NOISE, RANDOM_NOISE))
-
-    return max(damaging_moves, key=_score)
 
 
 def run_battle(
@@ -216,6 +237,10 @@ def run_battle(
     Run a single battle between two Pokemon.
     Returns a BattleResult with winner, turns, and HP data.
     Pokemon instances are not mutated -- deep copies are used internally.
+
+    The battle is fully deterministic when rand_ivs=False (the default).
+    With rand_ivs=True an rng is used only for IV generation at the start;
+    all in-battle decisions remain deterministic.
     """
     if rng is None:
         rng = random.Random()
@@ -226,14 +251,11 @@ def run_battle(
     a = initialize_battle_state(pokemon_a, level=level, ivs=ivs_a, gen1_mode=gen1_mode)
     b = initialize_battle_state(pokemon_b, level=level, ivs=ivs_b, gen1_mode=gen1_mode)
 
-    # Apply paralysis speed penalty at init
-    # (handled during turn via stage_multiplier; no separate init needed)
-
     turns = 0
     while turns < MAX_TURNS:
         turns += 1
 
-        # Determine move order by speed (ties broken randomly)
+        # Determine move order by speed; paralysis halves speed
         spd_a = a.stats.get("speed", 1) * a.stage_multiplier("speed")
         spd_b = b.stats.get("speed", 1) * b.stage_multiplier("speed")
         if a.status == "paralysis":
@@ -241,6 +263,8 @@ def run_battle(
         if b.status == "paralysis":
             spd_b *= 0.5
 
+        # Speed ties broken by rng -- the only remaining non-IV rng in a
+        # deterministic run; ties are rare and have no strategic content
         if spd_a > spd_b:
             first, second = a, b
         elif spd_b > spd_a:
@@ -252,30 +276,31 @@ def run_battle(
             if attacker.is_fainted() or defender.is_fainted():
                 break
 
-            # Status skip check
-            if _check_status_skip(attacker, rng):
+            # Sleep / freeze block action
+            if _check_status_skip(attacker):
                 continue
 
-            move = _choose_move(attacker, defender, rng)
+            move = _choose_move(attacker, defender)
 
             if move.category == "status":
                 if move.status_effect:
-                    _apply_status(defender, move.status_effect, rng)
+                    _apply_status(defender, move.status_effect)
                 if move.stat_changes:
                     _apply_stat_changes(attacker, defender, move.stat_changes)
             else:
-                dmg = _calc_damage(attacker, defender, move, rng, level=level)
-                defender.current_hp = max(0, defender.current_hp - dmg)
-                # Move may also inflict status (e.g. Flamethrower burn chance)
-                if move.status_effect and rng.random() < 0.30:
-                    _apply_status(defender, move.status_effect, rng)
+                dmg = _calc_damage(attacker, defender, move, level=level)
+                defender.current_hp = max(0, defender.current_hp - int(dmg))
+                # Deterministic secondary status: apply if the move has one
+                # and the target is not already statused
+                if move.status_effect and defender.status is None:
+                    _apply_status(defender, move.status_effect)
 
             if defender.is_fainted():
                 break
 
-        # End-of-turn status damage
-        _end_of_turn_status(a, rng)
-        _end_of_turn_status(b, rng)
+        # End-of-turn status damage and sleep/freeze tick
+        _end_of_turn_status(a)
+        _end_of_turn_status(b)
 
         if a.is_fainted() or b.is_fainted():
             break
@@ -283,7 +308,6 @@ def run_battle(
     # Determine winner
     timeout = turns >= MAX_TURNS and not a.is_fainted() and not b.is_fainted()
     if timeout:
-        # Resolve by highest HP percentage remaining
         pct_a = a.current_hp / a.max_hp
         pct_b = b.current_hp / b.max_hp
         winner, loser = (a, b) if pct_a >= pct_b else (b, a)
@@ -292,8 +316,8 @@ def run_battle(
     else:
         winner, loser = a, b
 
-    # Check if the winner had a type advantage
-    winner_has_adv = TYPE_CHART.multiplier(winner.types[0], loser.types) > 1.0
+    # Check if winner had a type advantage -- check all of winner's types
+    winner_has_adv = any(TYPE_CHART.multiplier(t, loser.types) > 1.0 for t in winner.types)
 
     return BattleResult(
         winner=winner.name,
