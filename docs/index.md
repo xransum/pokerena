@@ -38,7 +38,7 @@ pokerena battle pikachu mewtwo
 pokerena search --type fire --tier ou --min-bst 500 --sort bst --desc
 
 # Show cache info
-pokerena cache info
+pokerena db info
 ```
 
 See the [CLI Reference](cli.md) for the full command documentation and the
