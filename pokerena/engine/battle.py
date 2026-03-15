@@ -29,7 +29,7 @@ STAB_MULTIPLIER = 1.5
 _OFFENSIVE_STATUSES = {"burn", "paralysis", "poison", "sleep", "freeze"}
 
 # Status conditions that reduce the target's offensive output -- the AI
-# prioritises these when the defender is a physical attacker.
+# prioritizes these when the defender is a physical attacker.
 _DEBUFF_STATUSES = {"burn", "paralysis"}
 
 
