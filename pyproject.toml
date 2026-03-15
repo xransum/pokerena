@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pokerena"
-version = "0.1.0"
+version = "0.1.1"
 description = "Pokemon battle tournament simulator -- runs millions of battles to rank every Pokemon by tier and compare against Smogon placements."
 readme = "README.md"
 license = { file = "LICENSE" }

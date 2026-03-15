@@ -194,7 +194,7 @@ def _choose_move(attacker: Pokemon, defender: Pokemon, rules: BattleRules | None
     offensive_status_moves = [m for m in status_moves if m.status_effect or m.stat_changes]
     if offensive_status_moves and _status_is_advantageous(attacker, defender):
         # Prefer the status move only if it gives a stronger expected advantage
-        # than just attacking this turn.  We approximate this by checking
+        # than just attacking this turn. We approximate this by checking
         # whether the best damaging move would KO the defender in one hit --
         # if so, just attack; otherwise the status is worth a turn investment.
         if damaging_moves:
