@@ -2,7 +2,7 @@
 CLI entry point for pokerena.
 
 Commands:
-  pokerena run [options]              run a tournament simulation
+  pokerena tournament [options]       run a tournament simulation
   pokerena battle <name> <name>       run a single battle between two named Pokemon
   pokerena battle --random            pick two random Pokemon and battle them
   pokerena search                     list and filter Pokemon by name/type/tier/gen/BST
@@ -207,7 +207,7 @@ def cli() -> None:
 )
 @click.option("--gen1-mode", is_flag=True, help="Use Gen 1 stat formula instead of Gen 3+ default.")
 @click.option("--verbose", "-v", is_flag=True, help="Enable debug logging to stderr.")
-def run(
+def tournament(
     gen: int,
     all_gens: bool,
     battles: int,
@@ -228,10 +228,10 @@ def run(
     Examples:
 
     \b
-        pokerena run
-        pokerena run --gen 2 --battles 50
-        pokerena run --all-gens --workers 8
-        pokerena run --gen 1 --rand-ivs --seed 42
+        pokerena tournament
+        pokerena tournament --gen 2 --battles 50
+        pokerena tournament --all-gens --workers 8
+        pokerena tournament --gen 1 --rand-ivs --seed 42
     """
     _setup_logging(verbose)
     # --gen1-mode is a backwards-compat alias for --gen 1
