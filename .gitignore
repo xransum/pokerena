@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# pokerena -- cache and results are local, keep directory stubs only
+cache/pokeapi/*.json
+cache/smogon/*.json
+results/gen*/
+!results/.gitkeep
