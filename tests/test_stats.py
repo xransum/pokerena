@@ -5,10 +5,6 @@ Tests for the stat calculator.
 from pokerena.engine.stats import compute_stats, initialize_battle_state, random_ivs
 from pokerena.models import Move, Pokemon
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _simple_pokemon(**overrides):
     base = {
@@ -29,11 +25,6 @@ def _simple_pokemon(**overrides):
     }
     base.update(overrides)
     return Pokemon(**base)
-
-
-# ---------------------------------------------------------------------------
-# compute_stats
-# ---------------------------------------------------------------------------
 
 
 class TestComputeStats:
@@ -149,11 +140,6 @@ class TestComputeStats:
             assert lv100[stat] > lv50[stat]
 
 
-# ---------------------------------------------------------------------------
-# random_ivs
-# ---------------------------------------------------------------------------
-
-
 class TestRandomIvs:
     def test_returns_all_stats(self):
         import random
@@ -177,11 +163,6 @@ class TestRandomIvs:
         ivs1 = random_ivs(random.Random(99))
         ivs2 = random_ivs(random.Random(99))
         assert ivs1 == ivs2
-
-
-# ---------------------------------------------------------------------------
-# initialize_battle_state
-# ---------------------------------------------------------------------------
 
 
 class TestInitializeBattleState:

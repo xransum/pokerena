@@ -19,21 +19,12 @@ from pokerena.engine.stats import initialize_battle_state, random_ivs
 from pokerena.engine.types import TYPE_CHART
 from pokerena.models import Move, Pokemon
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 MAX_TURNS = 60
 CRIT_CHANCE = 1 / 24  # Gen 6 base crit rate
 CRIT_MULTIPLIER = 1.5
 STAB_MULTIPLIER = 1.5
 STATUS_MOVE_CHANCE = 0.25  # AI: 25% chance to use status if available
 RANDOM_NOISE = 0.05  # ±5% noise on damage
-
-
-# ---------------------------------------------------------------------------
-# Battle result
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -47,11 +38,6 @@ class BattleResult:
     winner_hp_pct: float
     # Type matchup flags
     attacker_had_advantage: bool = False
-
-
-# ---------------------------------------------------------------------------
-# Damage calculation
-# ---------------------------------------------------------------------------
 
 
 def _calc_damage(
@@ -107,11 +93,6 @@ def _calc_damage(
 
     damage = int(base * stab * type_mult * crit * noise)
     return max(1, damage)
-
-
-# ---------------------------------------------------------------------------
-# Status condition application and end-of-turn effects
-# ---------------------------------------------------------------------------
 
 
 def _apply_status(target: Pokemon, status: str, rng: random.Random) -> bool:
@@ -172,11 +153,6 @@ def _check_status_skip(pokemon: Pokemon, rng: random.Random) -> bool:
     return pokemon.status == "paralysis" and rng.random() < 0.25  # 25% full paralysis chance
 
 
-# ---------------------------------------------------------------------------
-# Stat stage changes
-# ---------------------------------------------------------------------------
-
-
 def _apply_stat_changes(
     user: Pokemon,
     target: Pokemon,
@@ -192,11 +168,6 @@ def _apply_stat_changes(
             # Raises user's stat
             current = user.stat_stages.get(stat, 0)
             user.stat_stages[stat] = min(6, current + delta)
-
-
-# ---------------------------------------------------------------------------
-# AI move selection
-# ---------------------------------------------------------------------------
 
 
 def _choose_move(
@@ -228,11 +199,6 @@ def _choose_move(
         return base * (1.0 + rng.uniform(-RANDOM_NOISE, RANDOM_NOISE))
 
     return max(damaging_moves, key=_score)
-
-
-# ---------------------------------------------------------------------------
-# Main battle function
-# ---------------------------------------------------------------------------
 
 
 def run_battle(

@@ -27,11 +27,6 @@ SRC = "pokerena"
 TESTS = "tests"
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _install(session: nox.Session) -> None:
     """Install the package and its runtime deps into the session venv."""
     session.run("uv", "pip", "install", "-e", ".", external=True)
@@ -42,11 +37,6 @@ def _install_dev(session: nox.Session, *extras: str) -> None:
     _install(session)
     if extras:
         session.run("uv", "pip", "install", *extras, external=True)
-
-
-# ---------------------------------------------------------------------------
-# Sessions
-# ---------------------------------------------------------------------------
 
 
 @nox.session(python=PYTHON, name="pre-commit")

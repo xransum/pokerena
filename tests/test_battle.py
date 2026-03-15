@@ -17,18 +17,9 @@ from pokerena.engine.battle import (
 from pokerena.engine.stats import initialize_battle_state
 from pokerena.models import Move, Pokemon
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _init(pokemon: Pokemon, **kwargs) -> Pokemon:
     return initialize_battle_state(pokemon, **kwargs)
-
-
-# ---------------------------------------------------------------------------
-# run_battle -- high-level outcome tests
-# ---------------------------------------------------------------------------
 
 
 class TestRunBattle:
@@ -137,11 +128,6 @@ def magikarp_b():
     )
 
 
-# ---------------------------------------------------------------------------
-# _apply_status
-# ---------------------------------------------------------------------------
-
-
 class TestApplyStatus:
     def test_apply_burn(self, charizard, seeded_rng):
         battler = _init(charizard)
@@ -196,11 +182,6 @@ class TestApplyStatus:
         assert result is False
 
 
-# ---------------------------------------------------------------------------
-# _check_status_skip
-# ---------------------------------------------------------------------------
-
-
 class TestCheckStatusSkip:
     def test_no_status_never_skips(self, mewtwo, seeded_rng):
         battler = _init(mewtwo)
@@ -240,11 +221,6 @@ class TestCheckStatusSkip:
         result = _check_status_skip(battler, random.Random(0))
         # May or may not skip depending on RNG -- just check it doesn't raise
         assert isinstance(result, bool)
-
-
-# ---------------------------------------------------------------------------
-# _calc_damage
-# ---------------------------------------------------------------------------
 
 
 class TestCalcDamage:
@@ -433,11 +409,6 @@ class TestCalcDamage:
         )
         # The vast majority should miss
         assert misses >= 40
-
-
-# ---------------------------------------------------------------------------
-# _end_of_turn_status
-# ---------------------------------------------------------------------------
 
 
 class TestEndOfTurnStatus:

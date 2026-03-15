@@ -20,11 +20,6 @@ _BASE = "https://pokeapi.co/api/v2"
 _RATE_DELAY = 0.05  # seconds between requests to be polite
 
 
-# ---------------------------------------------------------------------------
-# Low-level fetch helpers
-# ---------------------------------------------------------------------------
-
-
 def _get(url: str) -> dict:
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
@@ -40,11 +35,6 @@ def _fetch_cached(namespace: str, key: str, url: str) -> dict:
     disk_cache.put(namespace, key, data)
     time.sleep(_RATE_DELAY)
     return data
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def fetch_pokemon_list(limit: int = 2000) -> list[dict]:
@@ -73,11 +63,6 @@ def fetch_evolution_chain(url: str) -> dict:
     # Derive a stable cache key from the URL id
     chain_id = url.rstrip("/").split("/")[-1]
     return _fetch_cached("pokeapi", f"evochain_{chain_id}", url)
-
-
-# ---------------------------------------------------------------------------
-# Parsed helpers
-# ---------------------------------------------------------------------------
 
 
 def get_generation_number(pokemon_data: dict) -> int:

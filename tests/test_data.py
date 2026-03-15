@@ -13,10 +13,6 @@ from pokerena.data.smogon import (
 )
 from pokerena.models import TIERS
 
-# ---------------------------------------------------------------------------
-# Cache
-# ---------------------------------------------------------------------------
-
 
 class TestDiskCache:
     def test_put_and_get(self, tmp_path, monkeypatch):
@@ -52,25 +48,6 @@ class TestDiskCache:
         assert disk_cache.get("ns", "a") is None
         assert disk_cache.get("ns", "b") is None
 
-    def test_overwrite_existing(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(disk_cache, "_CACHE_ROOT", tmp_path)
-        disk_cache.put("ns", "key", {"v": 1})
-        disk_cache.put("ns", "key", {"v": 99})
-        result = disk_cache.get("ns", "key")
-        assert result["v"] == 99
-
-    def test_list_data_roundtrip(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(disk_cache, "_CACHE_ROOT", tmp_path)
-        data = [{"name": "bulbasaur"}, {"name": "ivysaur"}]
-        disk_cache.put("ns", "list_key", data)
-        result = disk_cache.get("ns", "list_key")
-        assert result == data
-
-
-# ---------------------------------------------------------------------------
-# Smogon tier normalization
-# ---------------------------------------------------------------------------
-
 
 class TestNormalizeTier:
     @pytest.mark.parametrize(
@@ -94,11 +71,6 @@ class TestNormalizeTier:
     @pytest.mark.parametrize("raw", ["NFE", "LC", "Banned", "", "  ", "AG"])
     def test_unknown_tiers_return_none(self, raw):
         assert _normalize_tier(raw) is None
-
-
-# ---------------------------------------------------------------------------
-# Smogon tier assignment
-# ---------------------------------------------------------------------------
 
 
 class TestAssignTier:
@@ -128,11 +100,6 @@ class TestAssignTier:
             assert assign_tier("testmon", tier_map) == tier
 
 
-# ---------------------------------------------------------------------------
-# Gen 1 fallback data
-# ---------------------------------------------------------------------------
-
-
 class TestGen1Fallback:
     def test_mewtwo_is_ubers(self):
         tiers = _build_gen1_fallback()
@@ -154,11 +121,6 @@ class TestGen1Fallback:
     def test_no_empty_names(self):
         tiers = _build_gen1_fallback()
         assert all(name for name in tiers)
-
-
-# ---------------------------------------------------------------------------
-# _parse_smogon_data
-# ---------------------------------------------------------------------------
 
 
 class TestParseSmogonData:

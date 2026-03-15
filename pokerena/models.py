@@ -11,10 +11,6 @@ if TYPE_CHECKING:
     from pokerena.engine.types import TypeChart
 
 
-# ---------------------------------------------------------------------------
-# Tier constants
-# ---------------------------------------------------------------------------
-
 TIERS = ["ubers", "ou", "uu", "ru", "nu", "pu"]
 
 # Ordered from weakest to strongest for playoff chain
@@ -28,11 +24,6 @@ TIER_LABELS = {
     "nu": "NU",
     "pu": "PU",
 }
-
-
-# ---------------------------------------------------------------------------
-# Move
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -58,11 +49,6 @@ class Move:
         effectiveness = type_chart.multiplier(self.type_, defender_types)
         acc = (self.accuracy / 100.0) if self.accuracy > 0 else 1.0
         return self.power * stab * effectiveness * acc
-
-
-# ---------------------------------------------------------------------------
-# Pokemon
-# ---------------------------------------------------------------------------
 
 
 @dataclass

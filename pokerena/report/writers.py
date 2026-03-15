@@ -40,11 +40,6 @@ def _write_csv(path: pathlib.Path, rows: list[dict[str, Any]]) -> None:
     log.debug("Wrote %d rows -> %s", len(rows), path)
 
 
-# ---------------------------------------------------------------------------
-# Tier leaderboards
-# ---------------------------------------------------------------------------
-
-
 def write_tier_leaderboard(lb: TierLeaderboard) -> None:
     out = _out_dir(lb.gen)
     path = out / f"tier_{lb.tier}_leaderboard.csv"
@@ -66,11 +61,6 @@ def write_tier_leaderboard(lb: TierLeaderboard) -> None:
     _write_csv(path, rows)
 
 
-# ---------------------------------------------------------------------------
-# Playoff results
-# ---------------------------------------------------------------------------
-
-
 def write_playoffs(gen: int, playoffs: list[PlayoffResult]) -> None:
     out = _out_dir(gen)
     for pr in playoffs:
@@ -90,11 +80,6 @@ def write_playoffs(gen: int, playoffs: list[PlayoffResult]) -> None:
             }
         ]
         _write_csv(out / fname, rows)
-
-
-# ---------------------------------------------------------------------------
-# Grand final
-# ---------------------------------------------------------------------------
 
 
 def write_grand_final(gf: GrandFinalResult) -> None:
@@ -126,11 +111,6 @@ def write_grand_final(gf: GrandFinalResult) -> None:
                 row[name_b] = f"{pct:.2%}" if pct is not None else "N/A"
         matrix_rows.append(row)
     _write_csv(out / "grand_final_matrix.csv", matrix_rows)
-
-
-# ---------------------------------------------------------------------------
-# Smogon delta report
-# ---------------------------------------------------------------------------
 
 
 def write_smogon_delta(
@@ -178,11 +158,6 @@ def write_smogon_delta(
     _write_csv(out / "smogon_delta.csv", rows)
 
 
-# ---------------------------------------------------------------------------
-# Evolutionary line report
-# ---------------------------------------------------------------------------
-
-
 def write_evo_line_report(
     gen: int,
     tier_leaderboards: dict[str, TierLeaderboard],
@@ -227,11 +202,6 @@ def write_evo_line_report(
     _write_csv(out / "evo_line_report.csv", rows)
 
 
-# ---------------------------------------------------------------------------
-# Upsets report
-# ---------------------------------------------------------------------------
-
-
 def write_upsets(gen: int, upsets: list[PlayoffResult]) -> None:
     out = _out_dir(gen)
     rows = [
@@ -246,11 +216,6 @@ def write_upsets(gen: int, upsets: list[PlayoffResult]) -> None:
         for u in upsets
     ]
     _write_csv(out / "upsets.csv", rows)
-
-
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
 
 
 def write_summary(gen: int, results: dict) -> None:
@@ -296,11 +261,6 @@ def write_summary(gen: int, results: dict) -> None:
         )
 
     _write_csv(out / "summary.csv", rows)
-
-
-# ---------------------------------------------------------------------------
-# Write all results for a generation
-# ---------------------------------------------------------------------------
 
 
 def write_all(gen: int, results: dict, pokemon_by_tier: dict) -> None:

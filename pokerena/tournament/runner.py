@@ -23,11 +23,6 @@ from pokerena.models import TIER_ORDER, Pokemon
 log = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Result containers
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class MatchupRecord:
     """Aggregated results for a specific A-vs-B matchup."""
@@ -111,11 +106,6 @@ class GrandFinalEntry:
     smogon_tier: str
 
 
-# ---------------------------------------------------------------------------
-# Worker functions (module-level for pickling with ProcessPoolExecutor)
-# ---------------------------------------------------------------------------
-
-
 def _run_matchup_worker(args: tuple) -> MatchupRecord:
     """
     Run N battles between two Pokemon and return aggregated MatchupRecord.
@@ -189,11 +179,6 @@ def _pokemon_to_dict(p: Pokemon) -> dict:
         "evo_line": p.evo_line,
         "evo_stage": p.evo_stage,
     }
-
-
-# ---------------------------------------------------------------------------
-# Tier round robin
-# ---------------------------------------------------------------------------
 
 
 def run_tier_tournament(
@@ -312,11 +297,6 @@ def _build_leaderboard(
     return lb
 
 
-# ---------------------------------------------------------------------------
-# Tiebreaker
-# ---------------------------------------------------------------------------
-
-
 def run_tiebreaker(
     a: Pokemon,
     b: Pokemon,
@@ -338,11 +318,6 @@ def run_tiebreaker(
         else:
             wins_b += 1
     return a.name if wins_a >= wins_b else b.name
-
-
-# ---------------------------------------------------------------------------
-# Playoff
-# ---------------------------------------------------------------------------
 
 
 def run_playoff(
@@ -384,11 +359,6 @@ def run_playoff(
         battles=n_battles,
         upset=upset,
     )
-
-
-# ---------------------------------------------------------------------------
-# Grand final
-# ---------------------------------------------------------------------------
 
 
 def run_grand_final(
@@ -466,11 +436,6 @@ def run_grand_final(
     if entries:
         result.champion = entries[0].name
     return result
-
-
-# ---------------------------------------------------------------------------
-# Full tournament runner
-# ---------------------------------------------------------------------------
 
 
 def run_full_tournament(
