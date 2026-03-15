@@ -135,7 +135,6 @@ def print_phase3_header(n_battles: int) -> None:
     """Print the Phase 3 grand final section header."""
     print()
     print(_c(f"Phase 3 -- Grand Final ({n_battles} battles/matchup)", bold=True))
-    print("  ...")
 
 
 def print_grand_final(gf: GrandFinalResult, top: int = 10) -> None:
