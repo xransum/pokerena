@@ -9,6 +9,30 @@ description = "Pokemon battle tournament simulator -- runs millions of battles t
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11,<4.0"
+keywords = [
+    "pokemon",
+    "battle",
+    "simulator",
+    "tournament",
+    "smogon",
+    "competitive",
+    "pokeapi",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Typing :: Typed",
+]
 dependencies = [
     "click>=8.1",
     "platformdirs>=4.0",
@@ -18,6 +42,12 @@ dependencies = [
 
 [project.scripts]
 pokerena = "pokerena.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/xransum/pokerena"
+Repository = "https://github.com/xransum/pokerena"
+Issues = "https://github.com/xransum/pokerena/issues"
+Changelog = "https://github.com/xransum/pokerena/releases"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pokerena"]
